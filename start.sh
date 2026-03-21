@@ -1,2 +1,2 @@
 #!/bin/bash
-python stock_alert.py
+python main.py
