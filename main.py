@@ -1,115 +1,205 @@
 import time
 import yfinance as yf
-import smtplib
-from email.mime.text import MIMEText
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
 import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from textblob import TextBlob
+import requests
 
-# ---------------- EMAIL ALERT ----------------
-def send_alert(message):
-    sender = "ankurdixitd@gmail.com"
-    receiver = "ankurdixitd@gmail.com"
-    msg = MIMEText(message)
-    msg["Subject"] = "Stock Alert"
-    msg["From"] = sender
-    msg["To"] = receiver
+# ---------- TELEGRAM ----------
+BOT_TOKEN = "8747551982:AAGlQW_Cll2xtV21e2gAo1bI-CnEqxf2vOI"
+CHAT_ID = "5909464423"
 
+def send_telegram(msg):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = {"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}
     try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
-            server.login(sender, "ajar rptk oque jncz")  # App Password
-            server.sendmail(sender, receiver, msg.as_string())
-        print("Alert sent:", message)
+        requests.post(url, data=data, timeout=10)
+        print("📲 Telegram Sent")
     except Exception as e:
-        print("Error sending alert:", e)
+        print("❌ Telegram Error:", e)
 
-# ---------------- INDICATORS ----------------
-def calculate_rsi(prices, period=14):
-    deltas = prices.diff()
-    gains = deltas.where(deltas > 0, 0)
-    losses = -deltas.where(deltas < 0, 0)
-    avg_gain = gains.rolling(period).mean()
-    avg_loss = losses.rolling(period).mean()
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
+# ---------- DATA ----------
+def get_data(symbol, interval, period):
+    try:
+        df = yf.download(symbol, interval=interval, period=period, progress=False)
+        if df is None or df.empty:
+            return pd.DataFrame()
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        return df
+    except Exception as e:
+        print(f"❌ Failed download for {symbol} ({interval}, {period}): {e}")
+        return pd.DataFrame()
 
-def calculate_macd(prices, short=12, long=26, signal=9):
-    short_ema = prices.ewm(span=short, adjust=False).mean()
-    long_ema = prices.ewm(span=long, adjust=False).mean()
-    macd = short_ema - long_ema
-    signal_line = macd.ewm(span=signal, adjust=False).mean()
-    return macd, signal_line
+# ---------- INDICATORS ----------
+def rsi(close, period=14):
+    delta = close.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    rs = gain.ewm(alpha=1/period).mean() / loss.ewm(alpha=1/period).mean()
+    return 100 - (100/(1+rs))
 
-def calculate_bollinger(prices, window=20):
-    sma = prices.rolling(window).mean()
-    std = prices.rolling(window).std()
-    upper = sma + (std * 2)
-    lower = sma - (std * 2)
-    return upper, lower
+def macd(close):
+    return close.ewm(span=12).mean() - close.ewm(span=26).mean()
 
-# ---------------- AI MODEL (TRAINING) ----------------
-def train_ai_model():
-    # Historical Sensex data for training
-    data = yf.download("^BSESN", period="6mo", interval="1d")
-    data["RSI"] = calculate_rsi(data["Close"])
-    macd, signal_line = calculate_macd(data["Close"])
-    data["MACD"] = macd
-    data["MACD_Signal"] = signal_line
-    upper, lower = calculate_bollinger(data["Close"])
-    data["Upper"] = upper
-    data["Lower"] = lower
+def atr(df, period=14):
+    tr = pd.concat([
+        df["High"] - df["Low"],
+        abs(df["High"] - df["Close"].shift()),
+        abs(df["Low"] - df["Close"].shift())
+    ], axis=1).max(axis=1)
+    return tr.rolling(period).mean()
 
-    # Label: 1 = BUY, 0 = SELL (simple rule for training)
-    data["Label"] = np.where((data["Close"] > data["Close"].shift(1)), 1, 0)
+def volume_spike(df):
+    avg_vol = df["Volume"].rolling(20).mean()
+    return df["Volume"].iloc[-1] > avg_vol.iloc[-1] * 1.5
 
-    features = data[["Close", "RSI", "MACD", "MACD_Signal", "Upper", "Lower"]].fillna(0)
-    labels = data["Label"]
+# ---------- NEWS ----------
+def news_sentiment(symbol):
+    try:
+        news = yf.Ticker(symbol).news
+        if not news:
+            return 0
+        score, count = 0, 0
+        for n in news[:5]:
+            title = n.get("title","") if isinstance(n,dict) else str(n)
+            if title:
+                score += TextBlob(title).sentiment.polarity
+                count += 1
+        return score/count if count else 0
+    except:
+        return 0
 
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(features, labels)
+# ---------- AI MODEL ----------
+def train(symbol):
+    df = get_data(symbol,"1d","6mo")
+    if df.empty:
+        return None
+    df["RSI"] = rsi(df["Close"])
+    df["MACD"] = macd(df["Close"])
+    df["Target"] = (df["Close"].shift(-3) > df["Close"]).astype(int)
+    df = df.dropna()
+    X = df[["RSI","MACD"]]
+    y = df["Target"]
+    model = RandomForestClassifier(n_estimators=200)
+    model.fit(X,y)
     return model
 
-# ---------------- MAIN ALERT SYSTEM ----------------
-def run_alert_system(stock_symbol="^BSESN"):
-    ai_model = train_ai_model()
+def predict(model, df):
+    df = df.copy()
+    df["RSI"] = rsi(df["Close"])
+    df["MACD"] = macd(df["Close"])
+    df = df.dropna()
+    if df.empty or model is None:
+        return None
+    last = df.iloc[-1]
+    X = pd.DataFrame({"RSI":[float(last["RSI"])],"MACD":[float(last["MACD"])]})
+    return model.predict_proba(X)[0][1]
+
+# ---------- MARKET TREND ----------
+def market_trend(symbol="NIFTYBEES.NS"):
+    df = get_data(symbol,"1h","60d")
+    if df.empty:
+        return 0
+    ema50 = df["Close"].ewm(span=50).mean()
+    ema200 = df["Close"].ewm(span=200).mean()
+    return 1 if ema50.iloc[-1] > ema200.iloc[-1] else -1
+
+# ---------- SIGNAL LOGIC ----------
+last_alert = {}
+
+def run(stocks):
+    print("🔥 Training Models...")
+    models = {s: train(s) for s in stocks}
+    print("✅ System Ready\n")
 
     while True:
-        data = yf.download(stock_symbol, period="1d", interval="5m")
+        m_trend = market_trend()
+        for s in stocks:
+            try:
+                # Intraday max 50-60 days
+                df_5m = get_data(s,"5m","50d")
+                df_15m = get_data(s,"15m","50d")
+                df_1h = get_data(s,"1h","60d")
 
-        price = data["Close"].iloc[-1].item()
-        avg = data["Close"].rolling(window=20).mean().iloc[-1].item()
-        rsi = calculate_rsi(data["Close"]).iloc[-1].item()
-        macd, signal_line = calculate_macd(data["Close"])
-        macd_val = macd.iloc[-1].item()
-        signal_val = signal_line.iloc[-1].item()
-        upper, lower = calculate_bollinger(data["Close"])
-        upper_val = upper.iloc[-1].item()
-        lower_val = lower.iloc[-1].item()
+                if df_5m.empty or len(df_5m) < 50:
+                    continue
 
-        print(f"Price: {price:.2f}, Avg: {avg:.2f}, RSI: {rsi:.2f}, MACD: {macd_val:.2f}, Signal: {signal_val:.2f}")
+                price = float(df_5m["Close"].iloc[-1])
+                prev_high = float(df_5m["High"].rolling(20).max().iloc[-2])
+                prev_low = float(df_5m["Low"].rolling(20).min().iloc[-2])
 
-        # AI Prediction
-        features = np.array([[price, rsi, macd_val, signal_val, upper_val, lower_val]])
-        ai_prob = ai_model.predict_proba(features)[0][1]  # Probability of BUY
+                prob = predict(models[s], df_5m)
+                if prob is None:
+                    continue
 
-        # Strong BUY condition
-        if (price > avg) and (rsi > 60) and (macd_val > signal_val) and (price > upper_val) and (ai_prob > 0.8):
-            send_alert(f"{stock_symbol}: STRONG BUY! "
-                       f"Price {price:.2f} > Avg {avg:.2f}, RSI={rsi:.2f}, MACD Bullish, Bollinger Breakout, "
-                       f"AI Confidence={ai_prob:.2f}")
+                rsi_val = float(rsi(df_5m["Close"]).iloc[-1])
+                macd_val = float(macd(df_5m["Close"]).iloc[-1])
+                news = news_sentiment(s)
+                atr_val = float(atr(df_5m).iloc[-1])
+                vol_ok = volume_spike(df_5m)
 
-        # Strong SELL condition
-        elif (price < avg) and (rsi < 40) and (macd_val < signal_val) and (price < lower_val) and (ai_prob < 0.2):
-            send_alert(f"{stock_symbol}: STRONG SELL! "
-                       f"Price {price:.2f} < Avg {avg:.2f}, RSI={rsi:.2f}, MACD Bearish, Bollinger Breakdown, "
-                       f"AI Confidence={1-ai_prob:.2f}")
+                # Multi-timeframe
+                rsi_15 = float(rsi(df_15m["Close"]).iloc[-1]) if not df_15m.empty else rsi_val
+                macd_15 = float(macd(df_15m["Close"]).iloc[-1]) if not df_15m.empty else macd_val
+                rsi_1h = float(rsi(df_1h["Close"]).iloc[-1]) if not df_1h.empty else rsi_val
+                macd_1h = float(macd(df_1h["Close"]).iloc[-1]) if not df_1h.empty else macd_val
 
-        else:
-            print("No strong AI signal, skipping notification.")
+                # -------- BUY SIGNAL --------
+                if (prob > 0.80 and price > prev_high and rsi_val>60 and macd_val>0
+                    and vol_ok and m_trend==1
+                    and rsi_15>55 and macd_15>0 and rsi_1h>50 and macd_1h>0
+                    and news>=0):
+                    if last_alert.get(s)!="BUY":
+                        msg=f"""
+                    🚀 *STRONG BUY SIGNAL*
+                    Stock: {s}
+                    Price: {price:.2f}
+                    🎯 Target: {price + 2*atr_val:.2f}
+                    🛑 SL: {price - atr_val:.2f}
+                    📊 AI: {prob:.2f}
+                    📈 RSI: {rsi_val:.2f} / 15m: {rsi_15:.2f} / 1h: {rsi_1h:.2f}
+                    📈 MACD: {macd_val:.2f} / 15m: {macd_15:.2f} / 1h: {macd_1h:.2f}
+                    📰 News: {news:.2f}
+                    📊 Volume Spike: {vol_ok}
+                    📊 Market Trend: {'UP' if m_trend==1 else 'DOWN'}
+                    """
+                        print(msg)
+                        send_telegram(msg)
+                        last_alert[s]="BUY"
 
-        time.sleep(60)
+                # -------- SELL SIGNAL --------
+                elif (prob < 0.20 and price < prev_low and rsi_val<40 and macd_val<0
+                      and vol_ok and m_trend==-1
+                      and rsi_15<45 and macd_15<0 and rsi_1h<50 and macd_1h<0
+                      and news<=0):
+                    if last_alert.get(s)!="SELL":
+                        msg=f"""
+                        🔻 *STRONG SELL SIGNAL*
+                        Stock: {s}
+                        Price: {price:.2f}
+                        🎯 Target: {price - 2*atr_val:.2f}
+                        🛑 SL: {price + atr_val:.2f}
+                        📊 AI: {prob:.2f}
+                        📉 RSI: {rsi_val:.2f} / 15m: {rsi_15:.2f} / 1h: {rsi_1h:.2f}
+                        📉 MACD: {macd_val:.2f} / 15m: {macd_15:.2f} / 1h: {macd_1h:.2f}
+                        📰 News: {news:.2f}
+                        📊 Volume Spike: {vol_ok}
+                        📊 Market Trend: {'UP' if m_trend==1 else 'DOWN'}
+                        """
+                        print(msg)
+                        send_telegram(msg)
+                        last_alert[s]="SELL"
 
+                else:
+                    print(f"{s}: No strong trade")
+
+            except Exception as e:
+                print(f"❌ Error {s}: {e}")
+
+        time.sleep(20)
+
+# ---------- RUN ----------
 if __name__ == "__main__":
-    run_alert_system("^BSESN")
+    run(["NIFTYBEES.NS","RELIANCE.NS","TCS.NS","HDFCBANK.NS","INFY.NS"])
