@@ -7,9 +7,8 @@ import requests
 from datetime import datetime
 import pytz
 
-# ---------- TELEGRAM ----------
-BOT_TOKEN = "PASTE_YOUR_TOKEN"
-CHAT_ID = "PASTE_YOUR_CHAT_ID"
+BOT_TOKEN = "8747551982:AAGlQW_Cll2xtV21e2gAo1bI-CnEqxf2vOI"
+CHAT_ID = "5909464423"
 
 def send_telegram(msg):
     try:
