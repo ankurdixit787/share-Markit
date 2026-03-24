@@ -5,7 +5,6 @@ from sklearn.ensemble import RandomForestClassifier
 from textblob import TextBlob
 import requests
 from datetime import datetime
-import pytz
 
 # ---------- TELEGRAM ----------
 BOT_TOKEN = "8747551982:AAGlQW_Cll2xtV21e2gAo1bI-CnEqxf2vOI"
@@ -134,51 +133,72 @@ def nifty_trend():
     ma = df["Close"].rolling(20).mean().iloc[-1]
     return 1 if price > ma else -1
 
-# ---------- GLOBALS ----------
+# ---------- TRACKING ----------
 last_alert = {}
 trade_log = []
 notification_count = 0
+report_sent = False
 
-# ---------- DAY-END REPORT ----------
+# ---------- REPORT ----------
 def day_end_report():
-    global trade_log, notification_count
-    total_trades = len(trade_log)
-    profit_trades = sum(1 for t in trade_log if t['Profit/Loss'] > 0)
-    loss_trades = sum(1 for t in trade_log if t['Profit/Loss'] <= 0)
-    net_profit = sum(t['Profit/Loss'] for t in trade_log)
+    total = len(trade_log)
+    profit = sum(1 for t in trade_log if t["result"] == "TARGET")
+    loss = sum(1 for t in trade_log if t["result"] == "SL")
 
-    report = f"📊 Day-End Report\n\nTotal Notifications: {notification_count}\nTotal Trades: {total_trades} (Profit: {profit_trades} | Loss: {loss_trades})\nNet Profit/Loss: {net_profit:.2f}\n\nStock-wise Summary:\n"
+    report = f"📊 DAY END REPORT\n\n"
+    report += f"Total Trades: {total}\n"
+    report += f"Profit Trades: {profit} ✅\n"
+    report += f"Loss Trades: {loss} ❌\n\n"
 
     for t in trade_log:
-        report += f"{t['Stock']} | {t['Type']} | Entry: {t['Price']:.2f} | Target: {t['Target']:.2f} | SL: {t['SL']:.2f} | Score: {t['Score']} | Result: {t['Result']} | Profit/Loss: {t['Profit/Loss']:.2f}\n"
+        status = "⚪"
+        if t["result"] == "TARGET":
+            status = "✅"
+        elif t["result"] == "SL":
+            status = "❌"
 
-    send_telegram(report)  # Telegram-only
+        report += f"{status} {t['symbol']} | {t['type']} | Score:{t['score']}\n"
 
-# ---------- MAIN LOOP ----------
+    send_telegram(report)
+
+# ---------- MAIN ----------
 def run():
+    global notification_count, report_sent
+
     print("🔥 Training Models...")
     models = {}
 
     for s in stocks:
+        print(f"Training {s}...")
         m = train(s)
         if m is not None:
             models[s] = m
 
     print("✅ System Ready\n")
-
-    report_sent = False
+    send_telegram("✅ Bot Started")
 
     while True:
-        now = datetime.now(pytz.timezone('Asia/Kolkata'))
+        now = datetime.now()
         hour = now.hour
         minute = now.minute
 
-        # MARKET TIME FILTER
+        # DAILY RESET
+        if hour == 9 and minute < 10:
+            trade_log.clear()
+            report_sent = False
+            last_alert.clear()
+            notification_count = 0
+
+        # MARKET CLOSED BLOCK + REPORT FIX
         if not ((hour > 9 or (hour == 9 and minute >= 20)) and (hour < 15 or (hour == 15 and minute <= 15))):
-            # Day-end report 5 min after market close
-            if not report_sent and hour == 15 and minute > 20:
+            print("⏸ Market Closed")
+
+            # ✅ REPORT FIX
+            if not report_sent and (hour > 15 or (hour == 15 and minute >= 20)):
+                send_telegram("📊 Sending Day-End Report...")
                 day_end_report()
                 report_sent = True
+
             time.sleep(60)
             continue
 
@@ -221,87 +241,33 @@ def run():
                 if price < prev_low: score_sell += 1
                 if news <= 0: score_sell += 1
 
-                # NIFTY FILTER
                 if nifty == 1:
                     score_sell = 0
                 elif nifty == -1:
                     score_buy = 0
 
-                target_buy = price + 2 * atr_val
-                sl_buy = price - atr_val
-
-                target_sell = price - 2 * atr_val
-                sl_sell = price + atr_val
-
                 accuracy = int(prob * 100)
 
-                # ---------- ALERT LOGIC (90% Accuracy + No Repeat) ----------
-                global notification_count
+                # ✅ 90% FILTER
+                if accuracy < 90:
+                    continue
 
-                # BUY ALERT
-                if score_buy >= 5 and accuracy >= 90:
-                    if last_alert.get(s) != "BUY":
-                        result = "✅ Target Hit" if price >= target_buy else ("❌ SL Hit" if price <= sl_buy else "⚠️ Open")
-                        msg = f"""🚀💀 VERY STRONG BUY
-{s}
-Price: {price:.2f}
-🎯 Target: {target_buy:.2f}
-🛑 SL: {sl_buy:.2f}
-📊 Accuracy: {accuracy}%
-Score: {score_buy}
-Result: {result}
-"""
-                        send_telegram(msg)
-                        last_alert[s] = "BUY"
-                        notification_count += 1
+                # ✅ REPEAT ALERT BLOCK
+                if last_alert.get(s) == "BUY" or last_alert.get(s) == "SELL":
+                    continue
 
-                        trade_log.append({
-                            "Stock": s,
-                            "Type": "BUY",
-                            "Price": price,
-                            "Target": target_buy,
-                            "SL": sl_buy,
-                            "Score": score_buy,
-                            "Result": result,
-                            "Profit/Loss": target_buy-price if price>=target_buy else (price-sl_buy if price<=sl_buy else 0)
-                        })
-                else:
-                    if last_alert.get(s) == "BUY":
-                        last_alert[s] = None  # Reset when BUY conditions fail
+                if score_buy >= 5:
+                    send_telegram(f"🚀 VERY STRONG BUY\n{s}\nPrice: {price}\nAccuracy: {accuracy}%")
+                    last_alert[s] = "BUY"
+                    notification_count += 1
 
-                # SELL ALERT
-                if score_sell >= 5 and accuracy >= 90:
-                    if last_alert.get(s) != "SELL":
-                        result = "✅ Target Hit" if price <= target_sell else ("❌ SL Hit" if price >= sl_sell else "⚠️ Open")
-                        msg = f"""🔻💀 VERY STRONG SELL
-{s}
-Price: {price:.2f}
-🎯 Target: {target_sell:.2f}
-🛑 SL: {sl_sell:.2f}
-📊 Accuracy: {accuracy}%
-Score: {score_sell}
-Result: {result}
-"""
-                        send_telegram(msg)
-                        last_alert[s] = "SELL"
-                        notification_count += 1
+                elif score_sell >= 5:
+                    send_telegram(f"🔻 VERY STRONG SELL\n{s}\nPrice: {price}\nAccuracy: {accuracy}%")
+                    last_alert[s] = "SELL"
+                    notification_count += 1
 
-                        trade_log.append({
-                            "Stock": s,
-                            "Type": "SELL",
-                            "Price": price,
-                            "Target": target_sell,
-                            "SL": sl_sell,
-                            "Score": score_sell,
-                            "Result": result,
-                            "Profit/Loss": price-target_sell if price>=target_sell else (sl_sell-price if price<=sl_sell else 0)
-                        })
-                else:
-                    if last_alert.get(s) == "SELL":
-                        last_alert[s] = None  # Reset when SELL conditions fail
-
-            except:
-                continue
+            except Exception as e:
+                print(f"Error {s}: {e}")
 
         time.sleep(20)
 
