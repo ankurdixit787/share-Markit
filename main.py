@@ -10,6 +10,7 @@ from datetime import datetime
 BOT_TOKEN = "8747551982:AAGlQW_Cll2xtV21e2gAo1bI-CnEqxf2vOI"
 CHAT_ID = "5909464423"
 
+
 def send_telegram(msg):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -33,7 +34,7 @@ stocks = [
 "HAL.NS","BEL.NS","GAIL.NS","IOC.NS","TORNTPHARM.NS",
 "LUPIN.NS","AUROPHARMA.NS","ICICIGI.NS","HAVELLS.NS","VOLTAS.NS",
 "COLPAL.NS","MARICO.NS","BERGEPAINT.NS","SRF.NS",
-"MPHASIS.NS","LTIM.NS","NAUKRI.NS","PAYTM.NS",
+"MPHASIS.NS","NAUKRI.NS","PAYTM.NS",
 "POLYCAB.NS","INDIGO.NS","DLF.NS","OBEROIRLTY.NS",
 "PNB.NS","BANKBARODA.NS","CANBK.NS","UNIONBANK.NS",
 "IDFCFIRSTB.NS","FEDERALBNK.NS","RBLBANK.NS"
