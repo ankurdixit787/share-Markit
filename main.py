@@ -7,19 +7,20 @@ import requests
 from datetime import datetime
 import pytz
 
-# ---------- TELEGRAM ---------
+# ---------- TELEGRAM ----------
 BOT_TOKEN = "8747551982:AAGlQW_Cll2xtV21e2gAo1bI-CnEqxf2vOI"
 CHAT_ID = "5909464423"
 
 def send_telegram(msg):
     try:
-    BOT_TOKEN = "8747551982:AAGlQW_Cll2xtV21e2gAo1bI-CnEqxf2vOI"
-    CHAT_ID = "5909464423"
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=10)
     except:
         pass
 
 # ---------- STOCKS ----------
-stocks = ["RELIANCE.NS","TCS.NS","HDFCBANK.NS","INFY.NS","ICICIBANK.NS",
+stocks = [
+"RELIANCE.NS","TCS.NS","HDFCBANK.NS","INFY.NS","ICICIBANK.NS",
 "HINDUNILVR.NS","ITC.NS","SBIN.NS","BHARTIARTL.NS","KOTAKBANK.NS",
 "LT.NS","AXISBANK.NS","ASIANPAINT.NS","MARUTI.NS","SUNPHARMA.NS",
 "TITAN.NS","ULTRACEMCO.NS","NESTLEIND.NS","POWERGRID.NS","NTPC.NS",
@@ -36,7 +37,7 @@ stocks = ["RELIANCE.NS","TCS.NS","HDFCBANK.NS","INFY.NS","ICICIBANK.NS",
 "MPHASIS.NS","LTIM.NS","NAUKRI.NS","PAYTM.NS",
 "POLYCAB.NS","INDIGO.NS","DLF.NS","OBEROIRLTY.NS",
 "PNB.NS","BANKBARODA.NS","CANBK.NS","UNIONBANK.NS",
-"IDFCFIRSTB.NS" 
+"IDFCFIRSTB.NS","FEDERALBNK.NS","RBLBANK.NS"
 ]
 
 # ---------- DATA ----------
