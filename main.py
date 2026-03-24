@@ -122,8 +122,7 @@ def predict(model, df):
         "MACD":[float(last["MACD"])]
     })
 
-    prob = model.predict_proba(X)[0][1]
-    return prob
+    return model.predict_proba(X)[0][1]
 
 # ---------- NIFTY TREND ----------
 def nifty_trend():
@@ -153,7 +152,7 @@ def run():
         hour = now.hour
         minute = now.minute
 
-        # MARKET TIME
+        # MARKET TIME FILTER
         if not ((hour > 9 or (hour == 9 and minute >= 20)) and (hour < 15 or (hour == 15 and minute <= 15))):
             print("⏸ Market Closed")
             time.sleep(60)
@@ -204,7 +203,6 @@ def run():
                 elif nifty == -1:
                     score_buy = 0
 
-                # TARGET & SL
                 target_buy = price + 2 * atr_val
                 sl_buy = price - atr_val
 
@@ -212,8 +210,6 @@ def run():
                 sl_sell = price + atr_val
 
                 accuracy = int(prob * 100)
-
-                # SIGNAL
 
                 if score_buy >= 5 and last_alert.get(s) != "BUY":
                     msg = f"""🚀💀 VERY STRONG BUY
@@ -251,6 +247,6 @@ Price: {price:.2f}
 
         time.sleep(20)
 
-# RUN
+# ---------- RUN ----------
 if __name__ == "__main__":
     run()
