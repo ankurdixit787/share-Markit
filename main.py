@@ -5,22 +5,22 @@ from sklearn.ensemble import RandomForestClassifier
 from textblob import TextBlob
 import requests
 from datetime import datetime
-import pytz  # Added for IST timezone
+import pytz
 
 # ---------- TELEGRAM ----------
-BOT_TOKEN = "8747551982:AAGlQW_Cll2xtV21e2gAo1bI-CnEqxf2vOI"
-CHAT_ID = "5909464423"
+BOT_TOKEN = "PASTE_YOUR_TOKEN"
+CHAT_ID = "PASTE_YOUR_CHAT_ID"
 
 def send_telegram(msg):
     try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=10)
+    BOT_TOKEN = "8747551982:AAGlQW_Cll2xtV21e2gAo1bI-CnEqxf2vOI"
+    CHAT_ID = "5909464423"
     except:
         pass
 
 # ---------- STOCKS ----------
 stocks = [
-"RELIANCE.NS","TCS.NS","HDFCBANK.NS","INFY.NS","ICICIBANK.NS",
+   "RELIANCE.NS","TCS.NS","HDFCBANK.NS","INFY.NS","ICICIBANK.NS",
 "HINDUNILVR.NS","ITC.NS","SBIN.NS","BHARTIARTL.NS","KOTAKBANK.NS",
 "LT.NS","AXISBANK.NS","ASIANPAINT.NS","MARUTI.NS","SUNPHARMA.NS",
 "TITAN.NS","ULTRACEMCO.NS","NESTLEIND.NS","POWERGRID.NS","NTPC.NS",
@@ -37,7 +37,7 @@ stocks = [
 "MPHASIS.NS","LTIM.NS","NAUKRI.NS","PAYTM.NS",
 "POLYCAB.NS","INDIGO.NS","DLF.NS","OBEROIRLTY.NS",
 "PNB.NS","BANKBARODA.NS","CANBK.NS","UNIONBANK.NS",
-"IDFCFIRSTB.NS"
+"IDFCFIRSTB.NS" 
 ]
 
 # ---------- DATA ----------
@@ -134,9 +134,27 @@ def nifty_trend():
     ma = df["Close"].rolling(20).mean().iloc[-1]
     return 1 if price > ma else -1
 
-# ---------- MAIN ----------
+# ---------- GLOBALS ----------
 last_alert = {}
+trade_log = []
+notification_count = 0
 
+# ---------- DAY-END REPORT ----------
+def day_end_report():
+    global trade_log, notification_count
+    total_trades = len(trade_log)
+    profit_trades = sum(1 for t in trade_log if t['Profit/Loss'] > 0)
+    loss_trades = sum(1 for t in trade_log if t['Profit/Loss'] <= 0)
+    net_profit = sum(t['Profit/Loss'] for t in trade_log)
+
+    report = f"📊 Day-End Report\n\nTotal Notifications: {notification_count}\nTotal Trades: {total_trades} (Profit: {profit_trades} | Loss: {loss_trades})\nNet Profit/Loss: {net_profit:.2f}\n\nStock-wise Summary:\n"
+
+    for t in trade_log:
+        report += f"{t['Stock']} | {t['Type']} | Entry: {t['Price']:.2f} | Target: {t['Target']:.2f} | SL: {t['SL']:.2f} | Score: {t['Score']} | Result: {t['Result']} | Profit/Loss: {t['Profit/Loss']:.2f}\n"
+
+    send_telegram(report)  # Telegram-only
+
+# ---------- MAIN LOOP ----------
 def run():
     print("🔥 Training Models...")
     models = {}
@@ -148,17 +166,19 @@ def run():
 
     print("✅ System Ready\n")
 
-    ist = pytz.timezone('Asia/Kolkata')  # Set IST timezone
+    report_sent = False
 
     while True:
-        now = datetime.now(ist)  # Current time in IST
+        now = datetime.now(pytz.timezone('Asia/Kolkata'))
         hour = now.hour
         minute = now.minute
 
         # MARKET TIME FILTER
-        market_open = (hour == 9 and minute >= 20) or (hour > 9 and hour < 15) or (hour == 15 and minute <= 15)
-        if not market_open:
-            print("⏸ Market Closed")
+        if not ((hour > 9 or (hour == 9 and minute >= 20)) and (hour < 15 or (hour == 15 and minute <= 15))):
+            # Day-end report 5 min after market close
+            if not report_sent and hour == 15 and minute > 20:
+                day_end_report()
+                report_sent = True
             time.sleep(60)
             continue
 
@@ -215,43 +235,76 @@ def run():
 
                 accuracy = int(prob * 100)
 
-                if score_buy >= 5 and last_alert.get(s) != "BUY":
-                    msg = f"""🚀💀 VERY STRONG BUY
+                # ---------- ALERT LOGIC (90% Accuracy + No Repeat) ----------
+                global notification_count
+
+                # BUY ALERT
+                if score_buy >= 5 and accuracy >= 90:
+                    if last_alert.get(s) != "BUY":
+                        result = "✅ Target Hit" if price >= target_buy else ("❌ SL Hit" if price <= sl_buy else "⚠️ Open")
+                        msg = f"""🚀💀 VERY STRONG BUY
 {s}
 Price: {price:.2f}
-
 🎯 Target: {target_buy:.2f}
 🛑 SL: {sl_buy:.2f}
-
 📊 Accuracy: {accuracy}%
+Score: {score_buy}
+Result: {result}
 """
-                    print(msg)
-                    send_telegram(msg)
-                    last_alert[s] = "BUY"
+                        send_telegram(msg)
+                        last_alert[s] = "BUY"
+                        notification_count += 1
 
-                elif score_sell >= 5 and last_alert.get(s) != "SELL":
-                    msg = f"""🔻💀 VERY STRONG SELL
+                        trade_log.append({
+                            "Stock": s,
+                            "Type": "BUY",
+                            "Price": price,
+                            "Target": target_buy,
+                            "SL": sl_buy,
+                            "Score": score_buy,
+                            "Result": result,
+                            "Profit/Loss": target_buy-price if price>=target_buy else (price-sl_buy if price<=sl_buy else 0)
+                        })
+                else:
+                    if last_alert.get(s) == "BUY":
+                        last_alert[s] = None  # Reset when BUY conditions fail
+
+                # SELL ALERT
+                if score_sell >= 5 and accuracy >= 90:
+                    if last_alert.get(s) != "SELL":
+                        result = "✅ Target Hit" if price <= target_sell else ("❌ SL Hit" if price >= sl_sell else "⚠️ Open")
+                        msg = f"""🔻💀 VERY STRONG SELL
 {s}
 Price: {price:.2f}
-
 🎯 Target: {target_sell:.2f}
 🛑 SL: {sl_sell:.2f}
-
 📊 Accuracy: {accuracy}%
+Score: {score_sell}
+Result: {result}
 """
-                    print(msg)
-                    send_telegram(msg)
-                    last_alert[s] = "SELL"
+                        send_telegram(msg)
+                        last_alert[s] = "SELL"
+                        notification_count += 1
 
+                        trade_log.append({
+                            "Stock": s,
+                            "Type": "SELL",
+                            "Price": price,
+                            "Target": target_sell,
+                            "SL": sl_sell,
+                            "Score": score_sell,
+                            "Result": result,
+                            "Profit/Loss": price-target_sell if price>=target_sell else (sl_sell-price if price<=sl_sell else 0)
+                        })
                 else:
-                    print(f"{s}: No trade")
+                    if last_alert.get(s) == "SELL":
+                        last_alert[s] = None  # Reset when SELL conditions fail
 
-            except Exception as e:
-                print(f"❌ Error {s}: {e}")
+            except:
+                continue
 
         time.sleep(20)
 
 # ---------- RUN ----------
 if __name__ == "__main__":
     run()
-    
