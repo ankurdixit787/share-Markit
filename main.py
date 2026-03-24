@@ -5,6 +5,7 @@ from sklearn.ensemble import RandomForestClassifier
 from textblob import TextBlob
 import requests
 from datetime import datetime
+import pytz  # Added for IST timezone
 
 # ---------- TELEGRAM ----------
 BOT_TOKEN = "8747551982:AAGlQW_Cll2xtV21e2gAo1bI-CnEqxf2vOI"
@@ -36,7 +37,7 @@ stocks = [
 "MPHASIS.NS","LTIM.NS","NAUKRI.NS","PAYTM.NS",
 "POLYCAB.NS","INDIGO.NS","DLF.NS","OBEROIRLTY.NS",
 "PNB.NS","BANKBARODA.NS","CANBK.NS","UNIONBANK.NS",
-"IDFCFIRSTB.NS","FEDERALBNK.NS","RBLBANK.NS"
+"IDFCFIRSTB.NS"
 ]
 
 # ---------- DATA ----------
@@ -147,13 +148,16 @@ def run():
 
     print("✅ System Ready\n")
 
+    ist = pytz.timezone('Asia/Kolkata')  # Set IST timezone
+
     while True:
-        now = datetime.now()
+        now = datetime.now(ist)  # Current time in IST
         hour = now.hour
         minute = now.minute
 
         # MARKET TIME FILTER
-        if not ((hour > 9 or (hour == 9 and minute >= 20)) and (hour < 15 or (hour == 15 and minute <= 15))):
+        market_open = (hour == 9 and minute >= 20) or (hour > 9 and hour < 15) or (hour == 15 and minute <= 15)
+        if not market_open:
             print("⏸ Market Closed")
             time.sleep(60)
             continue
@@ -250,3 +254,4 @@ Price: {price:.2f}
 # ---------- RUN ----------
 if __name__ == "__main__":
     run()
+    
