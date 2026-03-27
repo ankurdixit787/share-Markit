@@ -282,7 +282,7 @@ def run():
                     target = price + 2 * atr_val
                     sl = price - atr_val
 
-                    if score >= 6 and last_alert.get(s) != "BUY":
+                    if score >= 5 and last_alert.get(s) != "BUY":
                         msg = (
                             f"🚀 BUY ALERT: {s}\n"
                             f"Price: {price:.2f}\n"
@@ -328,7 +328,7 @@ def run():
                     target = price - 2 * atr_val
                     sl = price + atr_val
 
-                    if score >= 6 and last_alert.get(s) != "SELL":
+                    if score >= 5 and last_alert.get(s) != "SELL":
                         msg = (
                             f"⚠️ SELL ALERT: {s}\n"
                             f"Price: {price:.2f}\n"
