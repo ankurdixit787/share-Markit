@@ -265,7 +265,7 @@ def run():
                 if (price > ma20_5m) and (price > ma20_1h): backbone_score += 1
 
               # ---------- BUY BLOCK ----------
-                if backbone_score == 3:
+                if backbone_score == 4:
                     print(f"{GREEN}{s} | Backbone: PASS")
                     score = 0
                     cond_details = []
@@ -310,7 +310,7 @@ def run():
                     target = price + 2 * atr_val
                     sl = price - atr_val
 
-                    if score >= 5 and last_alert.get(s) != "BUY":
+                    if score >= 6 and last_alert.get(s) != "BUY":
                         msg = (
                             f"🚀 BUY ALERT: {s}\n"
                             f"Price: {price:.2f}\n"
@@ -327,7 +327,7 @@ def run():
                 else:
                     print(f"{RED}{s} | Backbone: FAIL | BUY Score: 0/8 | Price: {price:.2f}")
                     # ---------- SELL BLOCK ----------
-                if backbone_score == 3:
+                if backbone_score == 4:
                     print(f"{GREEN}{s} | Backbone: PASS")
                     score = 0
                     cond_details = []
@@ -372,7 +372,7 @@ def run():
                     target = price - 2 * atr_val
                     sl = price + atr_val
 
-                    if score >= 5 and last_alert.get(s) != "SELL":
+                    if score >= 6 and last_alert.get(s) != "SELL":
                         msg = (
                             f"⚠️ SELL ALERT: {s}\n"
                             f"Price: {price:.2f}\n"
@@ -394,44 +394,48 @@ def run():
         time.sleep(20)
         
 def generate_daily_report():
-    # Load trade log
-    with open("trade_log.json", "r") as f:
-        trades = json.load(f)
+    try:
+        # Load trade log safely
+        with open("trade_log.json", "r") as f:
+            trades = json.load(f)
 
-    today = datetime.now().strftime("%d %B %Y")
+        today = datetime.now().strftime("%d %B %Y")
 
-    # Summary counts
-    buy_count = sum(1 for t in trades if t["type"] == "BUY")
-    sell_count = sum(1 for t in trades if t["type"] == "SELL")
-    total = len(trades)
+        # Summary counts
+        buy_count = sum(1 for t in trades if t.get("type") == "BUY")
+        sell_count = sum(1 for t in trades if t.get("type") == "SELL")
+        total = len(trades)
 
-    # Performance metrics
-    profitable = sum(1 for t in trades if t.get("status") == "TARGET")
-    stoploss = sum(1 for t in trades if t.get("status") == "STOPLOSS")
-    win_rate = (profitable / total * 100) if total > 0 else 0
+        # Performance metrics
+        profitable = sum(1 for t in trades if t.get("status") == "TARGET")
+        stoploss = sum(1 for t in trades if t.get("status") == "STOPLOSS")
+        win_rate = (profitable / total * 100) if total > 0 else 0
 
-    # Highlights (last 5 trades only)
-    highlights = []
-    for t in trades[-5:]:
-        highlights.append(
-            f"- {t['symbol']} {t['type']} @ ₹{t['price']:.2f} ({t.get('status','Active')})"
+        # Highlights (last 5 trades only)
+        highlights = []
+        for t in trades[-5:]:
+            highlights.append(
+                f"- {t.get('symbol','--')} {t.get('type','--')} @ ₹{t.get('price',0):.2f} ({t.get('status','Active')})"
+            )
+
+        # Report text
+        report = (
+            f"📊 Daily Report – {today}\n\n"
+            f"🔢 Summary:\n"
+            f"- Total Alerts: {total}\n"
+            f"- BUY: {buy_count}\n"
+            f"- SELL: {sell_count}\n"
+            f"- ✅ Profitable: {profitable}\n"
+            f"- ❌ Stop Loss: {stoploss}\n"
+            f"- Win Rate: {win_rate:.0f}%\n\n"
+            f"🔎 Highlights (Last 5 Trades):\n" + ("\n".join(highlights) if highlights else "No trades yet.")
         )
 
-    # Report text
-    report = (
-        f"📊 Daily Report – {today}\n\n"
-        f"🔢 Summary:\n"
-        f"- Total Alerts: {total}\n"
-        f"- BUY: {buy_count}\n"
-        f"- SELL: {sell_count}\n"
-        f"- ✅ Profitable: {profitable}\n"
-        f"- ❌ Stop Loss: {stoploss}\n"
-        f"- Win Rate: {win_rate:.0f}%\n\n"
-        f"🔎 Highlights (Last 5 Trades):\n" + "\n".join(highlights)
-    )
+        return report
 
-    return report
-
+    except Exception as e:
+        return f"❌ Error generating report: {e}"
+    
 # Example: send at 3:30 PM
 if datetime.now().strftime("%H:%M") == "15:30":
     msg = generate_daily_report()
