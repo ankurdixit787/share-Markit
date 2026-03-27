@@ -193,9 +193,10 @@ def nifty_trend():
 
 # ---------- MAIN ----------
 last_alert = {}
+last_report_date = None  # track daily report
 
 def run():
-    global trade_log
+    global trade_log , last_report_date
     print("🚀 TOP 1 NUMBER BOT STARTED")
     print("🔥 Training Models...")
     models = {}
@@ -275,7 +276,7 @@ def run():
                         score += 1; cond_details.append("AI✔"); print("AI filter passed")
 
                     # 2. Breakout filter
-                    if price > last_high:
+                    if price > last_high and df["Close"].iloc[-1] > last_high and df["Close"].iloc[-2] < last_high:
                         score += 1; cond_details.append("BREAKOUT✔"); print("Breakout filter passed")
 
                     # 3. News sentiment filter
@@ -302,15 +303,17 @@ def run():
 
                     # 8. Volume spike confirm
                     vol_ratio = df["Volume"].iloc[-1] / df["Volume"].rolling(20).mean().iloc[-1]
-                    if vol_ratio > 2:
-                        score += 1; cond_details.append("VOL✔"); print("Volume spike filter passed")
+                    if vol_ratio > 1.2:
+                        score += 1; cond_details.append("VOL✔"); print("Volume filter passed")
+
 
                     print(f"{s} | BUY Score: {score}/8 | {' | '.join(cond_details)} | Price: {price:.2f}")
 
+                    sl = price - 1.5 * atr_val
                     target = price + 2 * atr_val
-                    sl = price - atr_val
 
-                    if score >= 6 and last_alert.get(s) != "BUY":
+
+                    if score >= 5 and last_alert.get(s) != "BUY":
                         msg = (
                             f"🚀 BUY ALERT: {s}\n"
                             f"Price: {price:.2f}\n"
@@ -364,8 +367,9 @@ def run():
 
                     # 8. Volume spike confirm
                     vol_ratio = df["Volume"].iloc[-1] / df["Volume"].rolling(20).mean().iloc[-1]
-                    if vol_ratio > 2:
-                        score += 1; cond_details.append("VOL✔"); print("Volume spike filter passed")
+                    if vol_ratio > 1.2:
+                         score += 1; cond_details.append("VOL✔"); print("Volume filter passed")
+
 
                     print(f"{RED}{s} | SELL Score: {score}/8 | {' | '.join(cond_details)} | Price: {price:.2f}")
 
