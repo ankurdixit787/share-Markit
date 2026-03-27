@@ -395,8 +395,11 @@ def run():
         
 def generate_daily_report():
     try:
-        # Load trade log safely
-        with open("trade_log.json", "r") as f:
+        # Safe file load
+        if not os.path.exists(LOG_FILE):
+            return "📊 Daily Report: No trades logged yet."
+
+        with open(LOG_FILE, "r") as f:
             trades = json.load(f)
 
         today = datetime.now().strftime("%d %B %Y")
@@ -435,7 +438,6 @@ def generate_daily_report():
 
     except Exception as e:
         return f"❌ Error generating report: {e}"
-    
 # Example: send at 3:30 PM
 if datetime.now().strftime("%H:%M") == "15:30":
     msg = generate_daily_report()
