@@ -215,7 +215,7 @@ def run():
         today_str = datetime.now(ist).strftime("%Y-%m-%d")
 
         # Market filter (comment out for testing)
-        if (today_str in HOLIDAYS_2026) or not ((hour > 9 or (hour == 9 and minute >= 15)) and (hour < 15 or (hour == 15 and minute <= 30))):
+        if (today_str in HOLIDAYS_2026) or now.weekday() in [5, 6] or not ((hour > 9 or (hour == 9 and minute >= 15)) and (hour < 15 or (hour == 15 and minute <= 30))):
             print("⏸ Market Closed or Holiday")
             if hour == 15 and minute >= 30:
                 print("📊 Sending Daily Report")
@@ -223,6 +223,7 @@ def run():
                 send_telegram(msg)
             time.sleep(60)
             continue
+
 
         nifty = nifty_trend()
 
@@ -266,132 +267,180 @@ def run():
                 if (price > ma20_5m) and (price > ma20_1h): backbone_score += 1
 
               # ---------- BUY BLOCK ----------
-                if backbone_score == 4:
-                    print(f"{GREEN}{s} | Backbone: PASS")
-                    score = 0
-                    cond_details = []
+                backbone_score = 0
+                backbone_details = []
 
-                    # 1. AI filter
-                    if prob > 0.75:
-                        score += 1; cond_details.append("AI✔"); print("AI filter passed")
+                # Backbone filters
+                if (price > ma20) and (nifty == 1):
+                    backbone_score += 1; backbone_details.append("MA20+NIFTY✔")
+                if (rsi_val > 60) and (macd_val > 0):
+                    backbone_score += 1; backbone_details.append("RSI+MACD✔")
+                if (price > vwap_val) and (vol_ratio > 1.5):
+                    backbone_score += 1; backbone_details.append("VWAP+VOL✔")
+                if (price > ma20_5m) and (price > ma20_1h):
+                    backbone_score += 1; backbone_details.append("MultiTF✔")
 
-                    # 2. Breakout filter
-                    if price > last_high and df["Close"].iloc[-1] > last_high and df["Close"].iloc[-2] < last_high:
-                        score += 1; cond_details.append("BREAKOUT✔"); print("Breakout filter passed")
+                print("\n/------------------ BUY BLOCK ------------------/")
+                print(f"Symbol: {s}")
+                print(f"Backbone: {backbone_score}/4 | {' | '.join(backbone_details) if backbone_details else 'None'}")
+                # Optional filters
+                score = 0
+                cond_details = []
 
-                    # 3. News sentiment filter
-                    if news_score > 0.2:
-                        score += 1; cond_details.append("NEWS✔"); print("News filter passed")
+                # 1. AI filter
+                if prob > 0.75:
+                    score += 1; cond_details.append("AI✔"); print("AI filter passed")
 
-                    # 4. Bollinger band filter
-                    upper_band = float(df["Close"].rolling(20).mean().iloc[-1] + 2 * df["Close"].rolling(20).std().iloc[-1])
-                    if price > upper_band:
-                        score += 1; cond_details.append("BOLL✔"); print("Bollinger filter passed")
+                # 2. Breakout filter
+                if price > last_high and df["Close"].iloc[-1] > last_high and df["Close"].iloc[-2] < last_high:
+                    score += 1; cond_details.append("BREAKOUT✔"); print("Breakout filter passed")
 
-                    # 5. ROC filter
-                    if roc_val > 0:
-                        score += 1; cond_details.append("ROC✔"); print("ROC filter passed")
+                # 3. News sentiment filter
+                if news_score > 0.2:
+                    score += 1; cond_details.append("NEWS✔"); print("News filter passed")
 
-                    # 6. ATR filter
-                    if abs(price - df["Close"].iloc[-2]) > 1.5 * atr_val:
-                        score += 1; cond_details.append("ATR✔"); print("ATR filter passed")
+                # 4. Bollinger band filter
+                upper_band = float(df["Close"].rolling(20).mean().iloc[-1] + 2 * df["Close"].rolling(20).std().iloc[-1])
+                if price > upper_band:
+                    score += 1; cond_details.append("BOLL✔"); print("Bollinger filter passed")
 
-                    # 7. Extra timeframe confirm (15m MA check)
-                    ma_15m = df["Close"].rolling(15).mean().iloc[-1]
-                    if price > ma_15m:
-                        score += 1; cond_details.append("TF15m✔"); print("15m timeframe confirm passed")
+                # 5. ROC filter
+                if roc_val > 0:
+                    score += 1; cond_details.append("ROC✔"); print("ROC filter passed")
 
-                    # 8. Volume spike confirm
-                    vol_ratio = df["Volume"].iloc[-1] / df["Volume"].rolling(20).mean().iloc[-1]
-                    if vol_ratio > 1.2:
-                        score += 1; cond_details.append("VOL✔"); print("Volume filter passed")
+                # 6. ATR filter
+                if abs(price - df["Close"].iloc[-2]) > 1.5 * atr_val:
+                    score += 1; cond_details.append("ATR✔"); print("ATR filter passed")
 
+                # 7. Extra timeframe confirm (15m MA check)
+                ma_15m = df["Close"].rolling(15).mean().iloc[-1]
+                if price > ma_15m:
+                    score += 1; cond_details.append("TF15m✔"); print("15m timeframe confirm passed")
 
-                    print(f"{s} | BUY Score: {score}/8 | {' | '.join(cond_details)} | Price: {price:.2f}")
+                # 8. Volume spike confirm
+                vol_ratio = df["Volume"].iloc[-1] / df["Volume"].rolling(20).mean().iloc[-1]
+                if vol_ratio > 1.2:
+                    score += 1; cond_details.append("VOL✔"); print("Volume filter passed")
 
-                    sl = price - 1.5 * atr_val
-                    target = price + 2 * atr_val
+                print(f"Optional Filters Passed: {score}/8 | {' | '.join(cond_details) if cond_details else 'None'}")
+                print(f"Price: {price:.2f}")
+                # SL and Target
+                sl = price - 1.5 * atr_val
+                target = price + 2 * atr_val
 
+                # Final condition: backbone must pass AND score >= 6
+                if backbone_score == 4 and score >= 6 and last_alert.get(s) != "BUY":
+                    trade_log.append({
+                        "symbol": s,
+                        "side": "BUY",
+                        "entry": price,
+                        "sl": sl,
+                        "target": target,
+                        "status": "Active"
+                    })
 
-                    if score >= 5 and last_alert.get(s) != "BUY":
-                        msg = (
-                            f"🚀 BUY ALERT: {s}\n"
-                            f"Price: {price:.2f}\n"
-                            f"Target: {target:.2f}\n"
-                            f"Stop Loss: {sl:.2f}\n"
-                            f"Score: {score}/8\n"
-                            f"{' | '.join(cond_details)}\n"
-                            f"Time: {now.strftime('%H:%M')}"
-                        )
-                        send_telegram(msg)
-                        trade_log.append({"symbol": s, "price": price, "type": "BUY", "time": now.strftime("%H:%M")})
-                        save_trades(trade_log)
-                        last_alert[s] = "BUY"
+                    msg = (
+                        f"🚀 BUY ALERT: {s}\n"
+                        f"Price: {price:.2f}\n"
+                        f"Target: {target:.2f}\n"
+                        f"Stop Loss: {sl:.2f}\n"
+                        f"Backbone: {backbone_score}/4 | {' | '.join(backbone_details)}\n"
+                        f"Score: {score}/8 | {' | '.join(cond_details)}\n"
+                        f"Time: {now.strftime('%H:%M')}"
+                    )
+                    send_telegram(msg)
+                    save_trades(trade_log)
+                    last_alert[s] = "BUY"
                 else:
-                    print(f"{RED}{s} | Backbone: FAIL | BUY Score: 0/8 | Price: {price:.2f}")
-                    # ---------- SELL BLOCK ----------
-                if backbone_score == 4:
-                    print(f"{GREEN}{s} | Backbone: PASS")
-                    score = 0
-                    cond_details = []
+                    print(f"{RED}{s} | Backbone: FAIL or Score < 6 | Price: {price:.2f}")
+                 # ---------- SELL BLOCK ----------
+                backbone_score = 0
+                backbone_details = []
 
-                    # 1. AI filter
-                    if prob < 0.25:
-                        score += 1; cond_details.append("AI✔"); print("AI filter passed")
+                # Backbone filters
+                if (price < ma20) and (nifty == -1):
+                    backbone_score += 1; backbone_details.append("MA20+NIFTY✔")
+                if (rsi_val < 40) and (macd_val < 0):
+                    backbone_score += 1; backbone_details.append("RSI+MACD✔")
+                if (price < vwap_val) and (vol_ratio > 1.5):
+                    backbone_score += 1; backbone_details.append("VWAP+VOL✔")
+                if (price < ma20_5m) and (price < ma20_1h):
+                    backbone_score += 1; backbone_details.append("MultiTF✔")
 
-                    # 2. Breakdown filter
-                    if price < last_low:
-                        score += 1; cond_details.append("BREAKDOWN✔"); print("Breakdown filter passed")
+                print("\n/------------------ SELL BLOCK -----------------/")
+                print(f"Symbol: {s}")
+                print(f"Backbone: {backbone_score}/4 | {' | '.join(backbone_details) if backbone_details else 'None'}")
 
-                    # 3. News sentiment filter
-                    if news_score < -0.2:
-                        score += 1; cond_details.append("NEWS✔"); print("News filter passed")
+                # Optional filters
+                score = 0
+                cond_details = []
 
-                    # 4. Bollinger band filter
-                    lower_band = float(df["Close"].rolling(20).mean().iloc[-1] - 2 * df["Close"].rolling(20).std().iloc[-1])
-                    if price < lower_band:
-                        score += 1; cond_details.append("BOLL✔"); print("Bollinger filter passed")
+                # 1. AI filter
+                if prob < 0.25:
+                    score += 1; cond_details.append("AI✔"); print("AI filter passed")
 
-                    # 5. ROC filter
-                    if roc_val < 0:
-                        score += 1; cond_details.append("ROC✔"); print("ROC filter passed")
+                # 2. Breakdown filter
+                if price < last_low:
+                    score += 1; cond_details.append("BREAKDOWN✔"); print("Breakdown filter passed")
 
-                    # 6. ATR filter
-                    if abs(df["Close"].iloc[-2] - price) > 1.5 * atr_val:
-                        score += 1; cond_details.append("ATR✔"); print("ATR filter passed")
+                # 3. News sentiment filter
+                if news_score < -0.2:
+                    score += 1; cond_details.append("NEWS✔"); print("News filter passed")
 
-                    # 7. Extra timeframe confirm (15m MA check)
-                    ma_15m = df["Close"].rolling(15).mean().iloc[-1]
-                    if price < ma_15m:
-                        score += 1; cond_details.append("TF15m✔"); print("15m timeframe confirm passed")
+                # 4. Bollinger band filter
+                lower_band = float(df["Close"].rolling(20).mean().iloc[-1] - 2 * df["Close"].rolling(20).std().iloc[-1])
+                if price < lower_band:
+                    score += 1; cond_details.append("BOLL✔"); print("Bollinger filter passed")
 
-                    # 8. Volume spike confirm
-                    vol_ratio = df["Volume"].iloc[-1] / df["Volume"].rolling(20).mean().iloc[-1]
-                    if vol_ratio > 1.2:
-                         score += 1; cond_details.append("VOL✔"); print("Volume filter passed")
+                # 5. ROC filter
+                if roc_val < 0:
+                    score += 1; cond_details.append("ROC✔"); print("ROC filter passed")
 
+                # 6. ATR filter
+                if abs(df["Close"].iloc[-2] - price) > 1.5 * atr_val:
+                    score += 1; cond_details.append("ATR✔"); print("ATR filter passed")
 
-                    print(f"{RED}{s} | SELL Score: {score}/8 | {' | '.join(cond_details)} | Price: {price:.2f}")
+                # 7. Extra timeframe confirm (15m MA check)
+                ma_15m = df["Close"].rolling(15).mean().iloc[-1]
+                if price < ma_15m:
+                    score += 1; cond_details.append("TF15m✔"); print("15m timeframe confirm passed")
 
-                    target = price - 2 * atr_val
-                    sl = price + atr_val
+                # 8. Volume spike confirm
+                vol_ratio = df["Volume"].iloc[-1] / df["Volume"].rolling(20).mean().iloc[-1]
+                if vol_ratio > 1.2:
+                    score += 1; cond_details.append("VOL✔"); print("Volume filter passed")
 
-                    if score >= 6 and last_alert.get(s) != "SELL":
-                        msg = (
-                            f"⚠️ SELL ALERT: {s}\n"
-                            f"Price: {price:.2f}\n"
-                            f"Target: {target:.2f}\n"
-                            f"Stop Loss: {sl:.2f}\n"
-                            f"Score: {score}/8\n"
-                            f"{' | '.join(cond_details)}\n"
-                            f"Time: {now.strftime('%H:%M')}"
-                        )
-                        send_telegram(msg)
-                        trade_log.append({"symbol": s, "price": price, "type": "SELL", "time": now.strftime("%H:%M")})
-                        save_trades(trade_log)
-                        last_alert[s] = "SELL"
+                print(f"{RED}{s} | SELL Score: {score}/8 | {' | '.join(cond_details) if cond_details else 'None'} | Price: {price:.2f}")
+
+                # SL and Target
+                target = price - 2 * atr_val
+                sl = price + atr_val
+
+                # Final condition: backbone must pass AND score >= 6
+                if backbone_score == 4 and score >= 6 and last_alert.get(s) != "SELL":
+                    trade_log.append({
+                        "symbol": s,
+                        "side": "SELL",
+                        "entry": price,
+                        "sl": sl,
+                        "target": target,
+                        "status": "Active"
+                    })
+
+                    msg = (
+                        f"⚠️ SELL ALERT: {s}\n"
+                        f"Price: {price:.2f}\n"
+                        f"Target: {target:.2f}\n"
+                        f"Stop Loss: {sl:.2f}\n"
+                        f"Backbone: {backbone_score}/4 | {' | '.join(backbone_details)}\n"
+                        f"Score: {score}/8 | {' | '.join(cond_details)}\n"
+                        f"Time: {now.strftime('%H:%M')}"
+                    )
+                    send_telegram(msg)
+                    save_trades(trade_log)
+                    last_alert[s] = "SELL"
                 else:
-                     print(f"{s} | Backbone: FAIL | SELL Score: 0/8 | Price: {price:.2f}")
+                    print(f"{s} | Backbone: FAIL or Score < 6 | Price: {price:.2f}")
             except Exception as e:
                      print(f"❌ MAIN ERROR: {e}")
 
