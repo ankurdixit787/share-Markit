@@ -213,14 +213,15 @@ def run():
         print(f"\n🕒 Time: {hour}:{minute}")
 
         today_str = datetime.now(ist).strftime("%Y-%m-%d")
-
+        last_report_date = None
         # Market filter (comment out for testing)
         if (today_str in HOLIDAYS_2026) or now.weekday() in [5, 6] or not ((hour > 9 or (hour == 9 and minute >= 15)) and (hour < 15 or (hour == 15 and minute <= 30))):
             print("⏸ Market Closed or Holiday")
-            if hour == 15 and minute >= 30:
+            if hour == 15 and minute >= 30 and last_report_date != today_str:
                 print("📊 Sending Daily Report")
                 msg = generate_daily_report()
                 send_telegram(msg)
+                last_report_date = today_str   # ✅ mark report done for today
             time.sleep(60)
             continue
 
@@ -448,47 +449,34 @@ def run():
         
 def generate_daily_report():
     try:
-        # Safe file load
-        if not os.path.exists(LOG_FILE):
-            return "📊 Daily Report: No trades logged yet."
+            total_alerts = len(trade_log)
+            buy_count = sum(1 for t in trade_log if t["side"] == "BUY")
+            sell_count = sum(1 for t in trade_log if t["side"] == "SELL")
+            profitable = sum(1 for t in trade_log if t.get("status") == "Profitable")
+            stop_loss = sum(1 for t in trade_log if t.get("status") == "Stop Loss")
+            active = sum(1 for t in trade_log if t.get("status") == "Active")
 
-        with open(LOG_FILE, "r") as f:
-            trades = json.load(f)
+            closed_trades = profitable + stop_loss
+            win_rate = (profitable / closed_trades * 100) if closed_trades > 0 else 0
 
-        today = datetime.now().strftime("%d %B %Y")
+            last_trades = trade_log[-5:] if len(trade_log) >= 5 else trade_log
 
-        # Summary counts
-        buy_count = sum(1 for t in trades if t.get("type") == "BUY")
-        sell_count = sum(1 for t in trades if t.get("type") == "SELL")
-        total = len(trades)
-
-        # Performance metrics
-        profitable = sum(1 for t in trades if t.get("status") == "TARGET")
-        stoploss = sum(1 for t in trades if t.get("status") == "STOPLOSS")
-        win_rate = (profitable / total * 100) if total > 0 else 0
-
-        # Highlights (last 5 trades only)
-        highlights = []
-        for t in trades[-5:]:
-            highlights.append(
-                f"- {t.get('symbol','--')} {t.get('type','--')} @ ₹{t.get('price',0):.2f} ({t.get('status','Active')})"
+            report = (
+                f"Daily Report – {datetime.now().strftime('%d %B %Y')}\n\n"
+                f"🔢 Summary:\n"
+                f"- Total Alerts: {total_alerts}\n"
+                f"- BUY: {buy_count}\n"
+                f"- SELL: {sell_count}\n"
+                f"- ✅ Profitable: {profitable}\n"
+                f"- ❌ Stop Loss: {stop_loss}\n"
+                f"- 📂 Active: {active}\n"
+                f"- Win Rate: {win_rate:.1f}%\n\n"
+                f"🔎 Highlights (Last {len(last_trades)} Trades):\n"
             )
+            for t in last_trades:
+                report += f"- {t['symbol']} {t['side']} @ ₹{t['entry']:.2f} ({t['status']})\n"
 
-        # Report text
-        report = (
-            f"📊 Daily Report – {today}\n\n"
-            f"🔢 Summary:\n"
-            f"- Total Alerts: {total}\n"
-            f"- BUY: {buy_count}\n"
-            f"- SELL: {sell_count}\n"
-            f"- ✅ Profitable: {profitable}\n"
-            f"- ❌ Stop Loss: {stoploss}\n"
-            f"- Win Rate: {win_rate:.0f}%\n\n"
-            f"🔎 Highlights (Last 5 Trades):\n" + ("\n".join(highlights) if highlights else "No trades yet.")
-        )
-
-        return report
-
+            return report
     except Exception as e:
         return f"❌ Error generating report: {e}"
 # Example: send at 3:30 PM
