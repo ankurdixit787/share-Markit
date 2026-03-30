@@ -450,8 +450,10 @@ def run():
 def generate_daily_report(trade_log):
     try:
         total_alerts = len(trade_log)
-        buy_count = sum(1 for t in trade_log if t.get("side") == "BUY")
-        sell_count = sum(1 for t in trade_log if t.get("side") == "SELL")
+        buy_count = sum(1 for t in trade_log if t.get("type") == "BUY")
+        sell_count = sum(1 for t in trade_log if t.get("type") == "SELL")
+
+        # Status abhi missing hai, to default assign karna hoga
         profitable = sum(1 for t in trade_log if t.get("status") == "Profitable")
         stop_loss = sum(1 for t in trade_log if t.get("status") == "Stop Loss")
         active = sum(1 for t in trade_log if t.get("status") == "Active")
@@ -476,14 +478,15 @@ def generate_daily_report(trade_log):
         )
         for t in last_trades:
             symbol = t.get("symbol", "N/A")
-            side = t.get("side", "N/A")
-            entry = t.get("entry", 0.0)
+            side = t.get("type", "N/A")   # <-- FIXED
+            entry = t.get("price", 0.0)   # <-- FIXED
             status = t.get("status", "Unknown")
             report += f"- {symbol} {side} @ ₹{entry:.2f} ({status})\n"
 
         return report
     except Exception as e:
         return f"❌ Error generating report: {e}"
+
 # Example: send at 3:30 PM
 if datetime.now().strftime("%H:%M") == "15:30":
     msg = generate_daily_report()
