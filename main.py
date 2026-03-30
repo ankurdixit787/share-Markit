@@ -447,36 +447,41 @@ def run():
 
         time.sleep(20)
         
-def generate_daily_report():
+def generate_daily_report(trade_log):
     try:
-            total_alerts = len(trade_log)
-            buy_count = sum(1 for t in trade_log if t["side"] == "BUY")
-            sell_count = sum(1 for t in trade_log if t["side"] == "SELL")
-            profitable = sum(1 for t in trade_log if t.get("status") == "Profitable")
-            stop_loss = sum(1 for t in trade_log if t.get("status") == "Stop Loss")
-            active = sum(1 for t in trade_log if t.get("status") == "Active")
+        total_alerts = len(trade_log)
+        buy_count = sum(1 for t in trade_log if t.get("side") == "BUY")
+        sell_count = sum(1 for t in trade_log if t.get("side") == "SELL")
+        profitable = sum(1 for t in trade_log if t.get("status") == "Profitable")
+        stop_loss = sum(1 for t in trade_log if t.get("status") == "Stop Loss")
+        active = sum(1 for t in trade_log if t.get("status") == "Active")
 
-            closed_trades = profitable + stop_loss
-            win_rate = (profitable / closed_trades * 100) if closed_trades > 0 else 0
+        closed_trades = profitable + stop_loss
+        win_rate = (profitable / closed_trades * 100) if closed_trades > 0 else 0
 
-            last_trades = trade_log[-5:] if len(trade_log) >= 5 else trade_log
+        last_trades = trade_log[-5:] if total_alerts >= 5 else trade_log
 
-            report = (
-                f"Daily Report – {datetime.now().strftime('%d %B %Y')}\n\n"
-                f"🔢 Summary:\n"
-                f"- Total Alerts: {total_alerts}\n"
-                f"- BUY: {buy_count}\n"
-                f"- SELL: {sell_count}\n"
-                f"- ✅ Profitable: {profitable}\n"
-                f"- ❌ Stop Loss: {stop_loss}\n"
-                f"- 📂 Active: {active}\n"
-                f"- Win Rate: {win_rate:.1f}%\n\n"
-                f"🔎 Highlights (Last {len(last_trades)} Trades):\n"
-            )
-            for t in last_trades:
-                report += f"- {t['symbol']} {t['side']} @ ₹{t['entry']:.2f} ({t['status']})\n"
+        report = (
+            f"📊 Daily Report – {datetime.now().strftime('%d %B %Y')}\n"
+            f"{'-'*40}\n"
+            f"🔢 Summary:\n"
+            f"- Total Alerts: {total_alerts}\n"
+            f"- BUY: {buy_count}\n"
+            f"- SELL: {sell_count}\n"
+            f"- ✅ Profitable: {profitable}\n"
+            f"- ❌ Stop Loss: {stop_loss}\n"
+            f"- 📂 Active: {active}\n"
+            f"- Win Rate: {win_rate:.1f}%\n\n"
+            f"🔎 Highlights (Last {len(last_trades)} Trades):\n"
+        )
+        for t in last_trades:
+            symbol = t.get("symbol", "N/A")
+            side = t.get("side", "N/A")
+            entry = t.get("entry", 0.0)
+            status = t.get("status", "Unknown")
+            report += f"- {symbol} {side} @ ₹{entry:.2f} ({status})\n"
 
-            return report
+        return report
     except Exception as e:
         return f"❌ Error generating report: {e}"
 # Example: send at 3:30 PM
