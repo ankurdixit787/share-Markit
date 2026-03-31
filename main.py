@@ -558,7 +558,7 @@ def generate_daily_report(trade_log):
 
 # Example: send at 3:30 PM
 if datetime.now().strftime("%H:%M") == "15:30":
-    msg = generate_daily_report()
+    msg = generate_daily_report(trade_log)
     send_telegram(msg)
 
 if __name__=="__main__":
