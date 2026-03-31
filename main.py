@@ -12,6 +12,12 @@ import yfinance as yf
 import pandas as pd
 
 
+def allow_trade_time():
+    now = datetime.now(pytz.timezone('Asia/Kolkata')).time()
+    start = datetime.strptime("09:25", "%H:%M").time()
+    end = datetime.strptime("14:30", "%H:%M").time()
+    return start <= now <= end
+
 HOLIDAYS_2026 = [
     "2026-01-26",  # Republic Day
     "2026-03-03",  # Holi
@@ -140,6 +146,39 @@ def atr(df):
 def vwap(df):
     return (df['Close']*df['Volume']).cumsum()/df['Volume'].cumsum()
 
+def is_retest_sell(df):
+    if len(df) < 20:
+        return False
+
+    c1 = df.iloc[-1]
+    c2 = df.iloc[-2]
+    c3 = df.iloc[-3]
+
+    vwap_val = vwap(df).iloc[-1]
+
+    return (
+        c3["Close"] < vwap_val and
+        c2["High"] >= vwap_val and
+        c1["Close"] < c2["Low"]
+    )
+
+
+def is_retest_buy(df):
+    if len(df) < 20:
+        return False
+
+    c1 = df.iloc[-1]
+    c2 = df.iloc[-2]
+    c3 = df.iloc[-3]
+
+    vwap_val = vwap(df).iloc[-1]
+
+    return (
+        c3["Close"] > vwap_val and
+        c2["Low"] <= vwap_val and
+        c1["Close"] > c2["High"]
+    )
+
 # ---------- NEWS SENTIMENT ----------
 def news_sentiment(symbol):
     try:
@@ -225,6 +264,10 @@ def run():
             time.sleep(60)
             continue
 
+        if not allow_trade_time():
+            print("⏰ Time Filter Blocked")
+            time.sleep(20)
+            continue
 
         nifty = nifty_trend()
 
@@ -331,13 +374,26 @@ def run():
 
                 # Final condition: backbone must pass AND score >= 6
                 if backbone_score == 4 and score >= 6 and last_alert.get(s) != "BUY":
+                    if not is_retest_buy(df):
+                        print("❌ Retest Failed (BUY)")
+                        continue
+
+                    if df["Volume"].iloc[-1] < df["Volume"].rolling(20).mean().iloc[-1]:
+                        print("❌ Volume Weak (BUY)")
+                        continue
+
+                    if df["Close"].iloc[-1] < df["Open"].iloc[-1]:
+                        print("❌ Candle Weak (BUY)")
+                        continue
                     trade_log.append({
                         "symbol": s,
                         "side": "BUY",
                         "entry": price,
                         "sl": sl,
                         "target": target,
-                        "status": "Active"
+                        "status": "Active",
+                        "date": now.strftime("%Y-%m-%d"),
+                        "time": now.strftime("%H:%M")
                     })
 
                     msg = (
@@ -419,13 +475,26 @@ def run():
 
                 # Final condition: backbone must pass AND score >= 6
                 if backbone_score == 4 and score >= 6 and last_alert.get(s) != "SELL":
+                    if not is_retest_sell(df):
+                        print("❌ Retest Failed (SELL)")
+                        continue
+
+                    if df["Volume"].iloc[-1] < df["Volume"].rolling(20).mean().iloc[-1]:
+                        print("❌ Volume Weak (SELL)")
+                        continue
+
+                    if df["Close"].iloc[-1] > df["Open"].iloc[-1]:
+                        print("❌ Candle Weak (SELL)")
+                        continue
                     trade_log.append({
-                        "symbol": s,
-                        "side": "SELL",
+                       "symbol": s,
+                        "side": "BUY",
                         "entry": price,
                         "sl": sl,
                         "target": target,
-                        "status": "Active"
+                        "status": "Active",
+                        "date": now.strftime("%Y-%m-%d"),
+                        "time": now.strftime("%H:%M")
                     })
 
                     msg = (
