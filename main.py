@@ -258,7 +258,7 @@ def run():
             print("⏸ Market Closed or Holiday")
             if hour == 15 and minute >= 30 and last_report_date != today_str:
                 print("📊 Sending Daily Report")
-                msg = generate_daily_report()
+                msg = generate_daily_report(trade_log)
                 send_telegram(msg)
                 last_report_date = today_str   # ✅ mark report done for today
             time.sleep(60)
