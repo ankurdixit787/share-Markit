@@ -371,20 +371,13 @@ def run():
                 # SL and Target
                 sl = price - 1.5 * atr_val
                 target = price + 2 * atr_val
+                
+                candle_ok = df["Close"].iloc[-1] > df["Open"].iloc[-1]
+                volume_ok = df["Volume"].iloc[-1] > df["Volume"].rolling(20).mean().iloc[-1]
+                retest_ok = is_retest_buy(df)
 
                 # Final condition: backbone must pass AND score >= 6
                 if backbone_score == 4 and score >= 6 and last_alert.get(s) != "BUY":
-                    if not is_retest_buy(df):
-                        print("❌ Retest Failed (BUY)")
-                        continue
-
-                    if df["Volume"].iloc[-1] < df["Volume"].rolling(20).mean().iloc[-1]:
-                        print("❌ Volume Weak (BUY)")
-                        continue
-
-                    if df["Close"].iloc[-1] < df["Open"].iloc[-1]:
-                        print("❌ Candle Weak (BUY)")
-                        continue
                     trade_log.append({
                         "symbol": s,
                         "side": "BUY",
@@ -401,6 +394,9 @@ def run():
                         f"Price: {price:.2f}\n"
                         f"Target: {target:.2f}\n"
                         f"Stop Loss: {sl:.2f}\n"
+                        f"Candle{'✔' if candle_ok else '❌'} | "
+                        f"Volume{'✔' if volume_ok else '❌'} | "
+                        f"Retest{'✔' if retest_ok else '❌'}"
                         f"Backbone: {backbone_score}/4 | {' | '.join(backbone_details)}\n"
                         f"Score: {score}/8 | {' | '.join(cond_details)}\n"
                         f"Time: {now.strftime('%H:%M')}"
@@ -473,19 +469,12 @@ def run():
                 target = price - 2 * atr_val
                 sl = price + atr_val
 
+                candle_ok = df["Close"].iloc[-1] > df["Open"].iloc[-1]
+                volume_ok = df["Volume"].iloc[-1] > df["Volume"].rolling(20).mean().iloc[-1]
+                retest_ok = is_retest_buy(df)
+                
                 # Final condition: backbone must pass AND score >= 6
                 if backbone_score == 4 and score >= 6 and last_alert.get(s) != "SELL":
-                    if not is_retest_sell(df):
-                        print("❌ Retest Failed (SELL)")
-                        continue
-
-                    if df["Volume"].iloc[-1] < df["Volume"].rolling(20).mean().iloc[-1]:
-                        print("❌ Volume Weak (SELL)")
-                        continue
-
-                    if df["Close"].iloc[-1] > df["Open"].iloc[-1]:
-                        print("❌ Candle Weak (SELL)")
-                        continue
                     trade_log.append({
                        "symbol": s,
                         "side": "BUY",
@@ -502,6 +491,9 @@ def run():
                         f"Price: {price:.2f}\n"
                         f"Target: {target:.2f}\n"
                         f"Stop Loss: {sl:.2f}\n"
+                        f"Candle{'✔' if candle_ok else '❌'} | "
+                        f"Volume{'✔' if volume_ok else '❌'} | "
+                        f"Retest{'✔' if retest_ok else '❌'}"
                         f"Backbone: {backbone_score}/4 | {' | '.join(backbone_details)}\n"
                         f"Score: {score}/8 | {' | '.join(cond_details)}\n"
                         f"Time: {now.strftime('%H:%M')}"
