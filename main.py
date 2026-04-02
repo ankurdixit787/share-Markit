@@ -1,4 +1,4 @@
-import time
+﻿import time
 import yfinance as yf
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
@@ -336,25 +336,25 @@ def run():
                     score += 1; cond_details.append("AI✔"); print("AI filter passed")
 
                 # 2. Breakout filter
-                if price > last_high and df["Close"].iloc[-1] > last_high and df["Close"].iloc[-2] < last_high:
-                    score += 1; cond_details.append("BREAKOUT✔"); print("Breakout filter passed")
+                # if price > last_high and df["Close"].iloc[-1] > last_high and df["Close"].iloc[-2] < last_high:
+                #     score += 1; cond_details.append("BREAKOUT✔"); print("Breakout filter passed")
 
                 # 3. News sentiment filter
                 if news_score > 0.2:
                     score += 1; cond_details.append("NEWS✔"); print("News filter passed")
 
                 # 4. Bollinger band filter
-                upper_band = float(df["Close"].rolling(20).mean().iloc[-1] + 2 * df["Close"].rolling(20).std().iloc[-1])
-                if price > upper_band:
-                    score += 1; cond_details.append("BOLL✔"); print("Bollinger filter passed")
+                # upper_band = float(df["Close"].rolling(20).mean().iloc[-1] + 2 * df["Close"].rolling(20).std().iloc[-1])
+                # if price > upper_band:
+                #     score += 1; cond_details.append("BOLL✔"); print("Bollinger filter passed")
 
                 # 5. ROC filter
                 if roc_val > 0:
                     score += 1; cond_details.append("ROC✔"); print("ROC filter passed")
 
                 # 6. ATR filter
-                if abs(price - df["Close"].iloc[-2]) > 1.5 * atr_val:
-                    score += 1; cond_details.append("ATR✔"); print("ATR filter passed")
+                # if abs(price - df["Close"].iloc[-2]) > 1.5 * atr_val:
+                #     score += 1; cond_details.append("ATR✔"); print("ATR filter passed")
 
                 # 7. Extra timeframe confirm (15m MA check)
                 ma_15m = df["Close"].rolling(15).mean().iloc[-1]
@@ -366,7 +366,7 @@ def run():
                 if vol_ratio > 1.2:
                     score += 1; cond_details.append("VOL✔"); print("Volume filter passed")
 
-                print(f"Optional Filters Passed: {score}/8 | {' | '.join(cond_details) if cond_details else 'None'}")
+                print(f"Optional Filters Passed: {score}/5 | {' | '.join(cond_details) if cond_details else 'None'}")
                 print(f"Price: {price:.2f}")
                 # SL and Target
                 sl = price - 1.5 * atr_val
@@ -376,8 +376,8 @@ def run():
                 volume_ok = df["Volume"].iloc[-1] > df["Volume"].rolling(20).mean().iloc[-1]
                 retest_ok = is_retest_buy(df)
 
-                # Final condition: backbone must pass AND score >= 6
-                if backbone_score == 4 and score >= 6 and last_alert.get(s) != "BUY":
+                # Final condition: backbone must pass AND score >= 3
+                if backbone_score == 4 and score >= 3 and last_alert.get(s) != "BUY":
                     trade_log.append({
                         "symbol": s,
                         "side": "BUY",
@@ -405,7 +405,7 @@ def run():
                     save_trades(trade_log)
                     last_alert[s] = "BUY"
                 else:
-                    print(f"{RED}{s} | Backbone: FAIL or Score < 6 | Price: {price:.2f}")
+                    print(f"{RED}{s} | Backbone: FAIL or Score < 3 | Price: {price:.2f}")
                  # ---------- SELL BLOCK ----------
                 backbone_score = 0
                 backbone_details = []
@@ -433,25 +433,25 @@ def run():
                     score += 1; cond_details.append("AI✔"); print("AI filter passed")
 
                 # 2. Breakdown filter
-                if price < last_low:
-                    score += 1; cond_details.append("BREAKDOWN✔"); print("Breakdown filter passed")
+                # if price < last_low:
+                #     score += 1; cond_details.append("BREAKDOWN✔"); print("Breakdown filter passed")
 
                 # 3. News sentiment filter
                 if news_score < -0.2:
                     score += 1; cond_details.append("NEWS✔"); print("News filter passed")
 
                 # 4. Bollinger band filter
-                lower_band = float(df["Close"].rolling(20).mean().iloc[-1] - 2 * df["Close"].rolling(20).std().iloc[-1])
-                if price < lower_band:
-                    score += 1; cond_details.append("BOLL✔"); print("Bollinger filter passed")
+                # lower_band = float(df["Close"].rolling(20).mean().iloc[-1] - 2 * df["Close"].rolling(20).std().iloc[-1])
+                # if price < lower_band:
+                #     score += 1; cond_details.append("BOLL✔"); print("Bollinger filter passed")
 
                 # 5. ROC filter
                 if roc_val < 0:
                     score += 1; cond_details.append("ROC✔"); print("ROC filter passed")
 
                 # 6. ATR filter
-                if abs(df["Close"].iloc[-2] - price) > 1.5 * atr_val:
-                    score += 1; cond_details.append("ATR✔"); print("ATR filter passed")
+                # if abs(df["Close"].iloc[-2] - price) > 1.5 * atr_val:
+                #     score += 1; cond_details.append("ATR✔"); print("ATR filter passed")
 
                 # 7. Extra timeframe confirm (15m MA check)
                 ma_15m = df["Close"].rolling(15).mean().iloc[-1]
@@ -473,8 +473,8 @@ def run():
                 volume_ok = df["Volume"].iloc[-1] > df["Volume"].rolling(20).mean().iloc[-1]
                 retest_ok = is_retest_buy(df)
                 
-                # Final condition: backbone must pass AND score >= 6
-                if backbone_score == 4 and score >= 6 and last_alert.get(s) != "SELL":
+                # Final condition: backbone must pass AND score >= 3
+                if backbone_score == 4 and score >= 3 and last_alert.get(s) != "SELL":
                     trade_log.append({
                        "symbol": s,
                         "side": "BUY",
@@ -502,7 +502,7 @@ def run():
                     save_trades(trade_log)
                     last_alert[s] = "SELL"
                 else:
-                    print(f"{s} | Backbone: FAIL or Score < 6 | Price: {price:.2f}")
+                    print(f"{s} | Backbone: FAIL or Score < 3 | Price: {price:.2f}")
             except Exception as e:
                      print(f"❌ MAIN ERROR: {e}")
 
