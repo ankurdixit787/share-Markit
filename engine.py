@@ -18,101 +18,57 @@ from news import news_sentiment
 
 
 def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, now: datetime) -> List[dict]:
-    # --- Pattern Detection and Telegram Notification (NIFTY only) ---
-    if symbol.upper() == "NIFTY" and len(df) > 21:
-        closes = df["Close"].iloc[-21:]
-        highs = df["High"].iloc[-21:]
-        lows = df["Low"].iloc[-21:]
+    # --- Big News Alert Logic ---
+    try:
+        import yfinance as yf
+        news = yf.Ticker(symbol).news
+        important_keywords = [
+            "crash", "ban", "record high", "all-time high", "scam", "merger", "acquisition", "policy change",
+            "fraud", "default", "bankruptcy", "fire", "strike", "investigation", "raid", "tax", "fine", "penalty",
+            "court", "lawsuit", "regulation", "approval", "deal", "partnership", "IPO", "listing", "delisting"
+        ]
+        big_news_found = False
+        big_news_title = ""
+        for n in news[:5]:
+            title = n.get("title", "") if isinstance(n, dict) else str(n)
+            if title:
+                title_lower = title.lower()
+                if any(k in title_lower for k in important_keywords):
+                    big_news_found = True
+                    big_news_title = title
+                    break
+        news_score = news_sentiment(symbol)
+        if big_news_found or news_score > 0.7 or news_score < -0.7:
+            if news_score > 0.3:
+                suggestion = "BUY"
+            elif news_score < -0.3:
+                suggestion = "SELL"
+            else:
+                suggestion = "WAIT"
+            msg = (
+                f"📰 BIG NEWS ALERT: {symbol}\n"
+                f"Title: {big_news_title if big_news_found else 'Sentiment Spike'}\n"
+                f"Sentiment: {news_score:.2f}\n"
+                f"Suggestion: {suggestion}\n"
+                f"Time: {now.strftime('%H:%M')}"
+            )
+            send_telegram(msg)
+    except Exception:
+        pass
 
-        # 1. Flag Pattern
+    # --- Flag Pattern Detection for ALL symbols (MANDATORY filter) ---
+    if len(df) > 21:
+        closes = df["Close"].iloc[-21:]
         up_move = closes.iloc[:15].mean() < closes.iloc[15]
         sideways = closes.iloc[15:].max() - closes.iloc[15:].min() < 0.01 * closes.iloc[15]
         if up_move and sideways:
-            entry = closes.iloc[-1]
-            target = entry + 2 * (closes.iloc[-1] - closes.iloc[0]) / 2  # Example target: half of recent move
-            msg = (
-                f"🚩 Flag Pattern Detected: {symbol}\n"
-                f"Last Price: {entry:.2f}\n"
-                f"Suggestion: BUY\n"
-                f"Target: {target:.2f}\n"
-                f"Time: {now.strftime('%H:%M')}"
-            )
-            send_telegram(msg)
-
-        # 2. Pennant Pattern
-        pennant_up = closes.iloc[:15].mean() < closes.iloc[15]
-        pennant_converge = (highs.iloc[15:].max() - highs.iloc[15:].min() < 0.008 * closes.iloc[15]) and (lows.iloc[15:].max() - lows.iloc[15:].min() < 0.008 * closes.iloc[15])
-        if pennant_up and pennant_converge:
-            entry = closes.iloc[-1]
-            target = entry + 2 * (closes.iloc[-1] - closes.iloc[0]) / 2
-            msg = (
-                f"🏳️ Pennant Pattern Detected: {symbol}\n"
-                f"Last Price: {entry:.2f}\n"
-                f"Suggestion: BUY\n"
-                f"Target: {target:.2f}\n"
-                f"Time: {now.strftime('%H:%M')}"
-            )
-            send_telegram(msg)
-
-        # 3. Ascending Triangle
-        flat_top = abs(highs.iloc[15:].max() - highs.iloc[15:].min()) < 0.005 * closes.iloc[15]
-        rising_lows = all(lows.iloc[15+i] > lows.iloc[15+i-1] for i in range(1,6))
-        if flat_top and rising_lows:
-            entry = closes.iloc[-1]
-            target = entry + 2 * (closes.iloc[-1] - closes.iloc[0]) / 2
-            msg = (
-                f"🔺 Ascending Triangle Detected: {symbol}\n"
-                f"Last Price: {entry:.2f}\n"
-                f"Suggestion: BUY\n"
-                f"Target: {target:.2f}\n"
-                f"Time: {now.strftime('%H:%M')}"
-            )
-            send_telegram(msg)
-
-        # 4. Descending Triangle
-        flat_bottom = abs(lows.iloc[15:].max() - lows.iloc[15:].min()) < 0.005 * closes.iloc[15]
-        falling_highs = all(highs.iloc[15+i] < highs.iloc[15+i-1] for i in range(1,6))
-        if flat_bottom and falling_highs:
-            entry = closes.iloc[-1]
-            target = entry - 2 * (closes.iloc[0] - closes.iloc[-1]) / 2
-            msg = (
-                f"🔻 Descending Triangle Detected: {symbol}\n"
-                f"Last Price: {entry:.2f}\n"
-                f"Suggestion: SELL\n"
-                f"Target: {target:.2f}\n"
-                f"Time: {now.strftime('%H:%M')}"
-            )
-            send_telegram(msg)
-
-        # 5. Rectangle/Channel with breakout alert only
-        channel_high = highs.iloc[15:].max() - highs.iloc[15:].min() < 0.01 * closes.iloc[15]
-        channel_low = lows.iloc[15:].max() - lows.iloc[15:].min() < 0.01 * closes.iloc[15]
-        if channel_high and channel_low:
-            entry = closes.iloc[-1]
-            upper = highs.iloc[15:].max()
-            lower = lows.iloc[15:].min()
-            # Breakout
-            if entry > upper:
-                target = entry + (upper - lower)
-                msg = (
-                    f"⬛ Rectangle Breakout: {symbol}\n"
-                    f"Last Price: {entry:.2f}\n"
-                    f"Suggestion: BUY\n"
-                    f"Target: {target:.2f}\n"
-                    f"Time: {now.strftime('%H:%M')}"
-                )
-                send_telegram(msg)
-            # Breakdown
-            elif entry < lower:
-                target = entry - (upper - lower)
-                msg = (
-                    f"⬛ Rectangle Breakdown: {symbol}\n"
-                    f"Last Price: {entry:.2f}\n"
-                    f"Suggestion: SELL\n"
-                    f"Target: {target:.2f}\n"
-                    f"Time: {now.strftime('%H:%M')}"
-                )
-                send_telegram(msg)
+            print(f"[Flag Pattern] {symbol}: DETECTED at {now.strftime('%H:%M')}")
+        else:
+            print(f"[Flag Pattern] {symbol}: NOT detected at {now.strftime('%H:%M')}")
+            return []  # If Flag Pattern not detected, skip all alerts
+    else:
+        print(f"[Flag Pattern] {symbol}: NOT ENOUGH DATA at {now.strftime('%H:%M')}")
+        return []  # Not enough data for pattern check
     # --- Breakout + Retest Only Alert Logic ---
     if ENABLE_RETEST_ALERT and len(df) > 22:
         # BUY: Breakout candle, then retest candle
@@ -255,15 +211,14 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
     print(f"Details: {buy_cond_details}")
     print("==============================\n")
 
-    # BUY signal: All backbone filters pass, enough optional filters, and last alert not BUY
-    if buy_backbone_score == 4 and buy_score >= 4 and last_alert_side != "BUY":
+    # BUY signal: At least 2 backbone and 2 score filters pass, all 3 conditions True, and last alert not BUY
+    candle_ok = df["Close"].iloc[-1] > df["Open"].iloc[-1]
+    volume_ok = df["Volume"].iloc[-1] > df["Volume"].rolling(20).mean().iloc[-1]
+    retest_ok = is_retest_buy(df)
+    if buy_backbone_score == 4 and buy_score >= 4 and last_alert_side != "BUY" and candle_ok and volume_ok and retest_ok:
         entry_price = high_price
         sl = entry_price - 1.5 * atr_val
         target = entry_price + 2 * atr_val
-        candle_ok = df["Close"].iloc[-1] > df["Open"].iloc[-1]
-        volume_ok = df["Volume"].iloc[-1] > df["Volume"].rolling(20).mean().iloc[-1]
-        retest_ok = is_retest_buy(df)
-
         actions.append({
             "side": "BUY",
             "trade": {
@@ -276,7 +231,7 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
                 "date": now.strftime("%Y-%m-%d"),
                 "time": now.strftime("%H:%M"),
             },
-            "msg": build_buy_message(
+            "msg": f"🚩 Flag Pattern Detected\n" + build_buy_message(
                 symbol,
                 entry_price,
                 target,
@@ -321,15 +276,14 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
     print(f"Details: {sell_cond_details}")
     print("==============================\n")
 
-    # SELL signal: All backbone filters pass, enough optional filters, and last alert not SELL
-    if sell_backbone_score == 4 and sell_score >= 4 and last_alert_side != "SELL":
+    # SELL signal: At least 2 backbone and 2 score filters pass, all 3 conditions True, and last alert not SELL
+    candle_ok_sell = df["Close"].iloc[-1] > df["Open"].iloc[-1]
+    volume_ok_sell = df["Volume"].iloc[-1] > df["Volume"].rolling(20).mean().iloc[-1]
+    retest_ok_sell = is_retest_sell(df)
+    if sell_backbone_score == 4 and sell_score >= 4 and last_alert_side != "SELL" and candle_ok_sell and volume_ok_sell and retest_ok_sell:
         entry_price = low_price
         target = entry_price - 2 * atr_val
         sl = entry_price + atr_val
-        candle_ok = df["Close"].iloc[-1] > df["Open"].iloc[-1]
-        volume_ok = df["Volume"].iloc[-1] > df["Volume"].rolling(20).mean().iloc[-1]
-        retest_ok = is_retest_sell(df)
-
         actions.append({
             "side": "SELL",
             "trade": {
@@ -342,14 +296,14 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
                 "date": now.strftime("%Y-%m-%d"),
                 "time": now.strftime("%H:%M"),
             },
-            "msg": build_sell_message(
+            "msg": f"🚩 Flag Pattern Detected\n" + build_sell_message(
                 symbol,
                 entry_price,
                 target,
                 sl,
-                candle_ok,
-                volume_ok,
-                retest_ok,
+                candle_ok_sell,
+                volume_ok_sell,
+                retest_ok_sell,
                 sell_backbone_score,
                 sell_backbone_details,
                 sell_score,

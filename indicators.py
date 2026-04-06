@@ -53,8 +53,9 @@ def is_retest_buy(df):
     c3 = df.iloc[-3]
     vwap_val = vwap(df).iloc[-1]
 
+    # Flexible: allow c2['Low'] within ±3 of VWAP
     return (
         c3["Close"] > vwap_val
-        and c2["Low"] <= vwap_val
+        and abs(c2["Low"] - vwap_val) <= 3
         and c1["Close"] > c2["High"]
     )

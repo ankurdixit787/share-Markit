@@ -3,18 +3,20 @@ from datetime import datetime
 
 def generate_daily_report(trade_log):
     try:
-        total_alerts = len(trade_log)
+        today = datetime.now().strftime("%Y-%m-%d")
+        today_trades = [t for t in trade_log if t.get("date") == today]
+        total_alerts = len(today_trades)
         buy_count = sum(
-            1 for t in trade_log if (t.get("side") or t.get("type")) == "BUY"
+            1 for t in today_trades if (t.get("side") or t.get("type")) == "BUY"
         )
         sell_count = sum(
-            1 for t in trade_log if (t.get("side") or t.get("type")) == "SELL"
+            1 for t in today_trades if (t.get("side") or t.get("type")) == "SELL"
         )
 
-        profitable = sum(1 for t in trade_log if t.get("status") == "Profitable")
-        stop_loss = sum(1 for t in trade_log if t.get("status") == "Stop Loss")
-        active = sum(1 for t in trade_log if t.get("status") == "Active")
-        open_count = sum(1 for t in trade_log if not t.get("status") or t.get("status") == "Open")
+        profitable = sum(1 for t in today_trades if t.get("status") == "Profitable")
+        stop_loss = sum(1 for t in today_trades if t.get("status") == "Stop Loss")
+        active = sum(1 for t in today_trades if t.get("status") == "Active")
+        open_count = sum(1 for t in today_trades if not t.get("status") or t.get("status") == "Open")
 
         closed_trades = profitable + stop_loss
         if closed_trades > 0:

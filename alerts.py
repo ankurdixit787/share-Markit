@@ -55,8 +55,8 @@ def calculate_buy_score(price, df, news_score, prob, roc_val):
 
 
     # 3. News sentiment filter
-    # If news_score is positive (>0.2), add to score
-    if news_score > 0.2:
+    # If news_score is positive (>0.01), add to score
+    if news_score > 0.01:
         score += 1
         cond_details.append("NEWS✔")
 
@@ -93,7 +93,7 @@ def calculate_sell_score(price, df, news_score, prob, roc_val):
         cond_details.append("AI✔")
 
 
-    if news_score < -0.2:
+    if news_score < -0.01:
         score += 1
         cond_details.append("NEWS✔")
 
