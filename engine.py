@@ -152,7 +152,6 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
         news_score,
         prob,
         roc_val,
-        atr_val,
     )
     print(f"⭐ Buy Optional Score: {buy_score}")
     print(f"Details: {buy_cond_details}")
@@ -219,7 +218,6 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
         news_score,
         prob,
         roc_val,
-        atr_val,
     )
     print(f"⭐ Sell Optional Score: {sell_score}")
     print(f"Details: {sell_cond_details}")
