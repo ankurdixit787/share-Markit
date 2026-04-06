@@ -3,6 +3,7 @@ from typing import List
 from datetime import datetime
 
 from ai_utils import predict
+from telegram import send_telegram
 from alerts import (
     build_buy_message,
     build_sell_message,
@@ -17,6 +18,101 @@ from news import news_sentiment
 
 
 def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, now: datetime) -> List[dict]:
+    # --- Pattern Detection and Telegram Notification (NIFTY only) ---
+    if symbol.upper() == "NIFTY" and len(df) > 21:
+        closes = df["Close"].iloc[-21:]
+        highs = df["High"].iloc[-21:]
+        lows = df["Low"].iloc[-21:]
+
+        # 1. Flag Pattern
+        up_move = closes.iloc[:15].mean() < closes.iloc[15]
+        sideways = closes.iloc[15:].max() - closes.iloc[15:].min() < 0.01 * closes.iloc[15]
+        if up_move and sideways:
+            entry = closes.iloc[-1]
+            target = entry + 2 * (closes.iloc[-1] - closes.iloc[0]) / 2  # Example target: half of recent move
+            msg = (
+                f"🚩 Flag Pattern Detected: {symbol}\n"
+                f"Last Price: {entry:.2f}\n"
+                f"Suggestion: BUY\n"
+                f"Target: {target:.2f}\n"
+                f"Time: {now.strftime('%H:%M')}"
+            )
+            send_telegram(msg)
+
+        # 2. Pennant Pattern
+        pennant_up = closes.iloc[:15].mean() < closes.iloc[15]
+        pennant_converge = (highs.iloc[15:].max() - highs.iloc[15:].min() < 0.008 * closes.iloc[15]) and (lows.iloc[15:].max() - lows.iloc[15:].min() < 0.008 * closes.iloc[15])
+        if pennant_up and pennant_converge:
+            entry = closes.iloc[-1]
+            target = entry + 2 * (closes.iloc[-1] - closes.iloc[0]) / 2
+            msg = (
+                f"🏳️ Pennant Pattern Detected: {symbol}\n"
+                f"Last Price: {entry:.2f}\n"
+                f"Suggestion: BUY\n"
+                f"Target: {target:.2f}\n"
+                f"Time: {now.strftime('%H:%M')}"
+            )
+            send_telegram(msg)
+
+        # 3. Ascending Triangle
+        flat_top = abs(highs.iloc[15:].max() - highs.iloc[15:].min()) < 0.005 * closes.iloc[15]
+        rising_lows = all(lows.iloc[15+i] > lows.iloc[15+i-1] for i in range(1,6))
+        if flat_top and rising_lows:
+            entry = closes.iloc[-1]
+            target = entry + 2 * (closes.iloc[-1] - closes.iloc[0]) / 2
+            msg = (
+                f"🔺 Ascending Triangle Detected: {symbol}\n"
+                f"Last Price: {entry:.2f}\n"
+                f"Suggestion: BUY\n"
+                f"Target: {target:.2f}\n"
+                f"Time: {now.strftime('%H:%M')}"
+            )
+            send_telegram(msg)
+
+        # 4. Descending Triangle
+        flat_bottom = abs(lows.iloc[15:].max() - lows.iloc[15:].min()) < 0.005 * closes.iloc[15]
+        falling_highs = all(highs.iloc[15+i] < highs.iloc[15+i-1] for i in range(1,6))
+        if flat_bottom and falling_highs:
+            entry = closes.iloc[-1]
+            target = entry - 2 * (closes.iloc[0] - closes.iloc[-1]) / 2
+            msg = (
+                f"🔻 Descending Triangle Detected: {symbol}\n"
+                f"Last Price: {entry:.2f}\n"
+                f"Suggestion: SELL\n"
+                f"Target: {target:.2f}\n"
+                f"Time: {now.strftime('%H:%M')}"
+            )
+            send_telegram(msg)
+
+        # 5. Rectangle/Channel with breakout alert only
+        channel_high = highs.iloc[15:].max() - highs.iloc[15:].min() < 0.01 * closes.iloc[15]
+        channel_low = lows.iloc[15:].max() - lows.iloc[15:].min() < 0.01 * closes.iloc[15]
+        if channel_high and channel_low:
+            entry = closes.iloc[-1]
+            upper = highs.iloc[15:].max()
+            lower = lows.iloc[15:].min()
+            # Breakout
+            if entry > upper:
+                target = entry + (upper - lower)
+                msg = (
+                    f"⬛ Rectangle Breakout: {symbol}\n"
+                    f"Last Price: {entry:.2f}\n"
+                    f"Suggestion: BUY\n"
+                    f"Target: {target:.2f}\n"
+                    f"Time: {now.strftime('%H:%M')}"
+                )
+                send_telegram(msg)
+            # Breakdown
+            elif entry < lower:
+                target = entry - (upper - lower)
+                msg = (
+                    f"⬛ Rectangle Breakdown: {symbol}\n"
+                    f"Last Price: {entry:.2f}\n"
+                    f"Suggestion: SELL\n"
+                    f"Target: {target:.2f}\n"
+                    f"Time: {now.strftime('%H:%M')}"
+                )
+                send_telegram(msg)
     # --- Breakout + Retest Only Alert Logic ---
     if ENABLE_RETEST_ALERT and len(df) > 22:
         # BUY: Breakout candle, then retest candle
@@ -81,9 +177,11 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
                 "msg": f"⚠️ BREAKDOWN+RETEST SELL ALERT: {symbol}\nPrice: {entry_price:.2f}\nTarget: {target:.2f}\nStop Loss: {sl:.2f}\nBreakdown: {last_low:.2f}\nTime: {now.strftime('%H:%M')}\n(Score/Backbone ignored)",
             })
 
+
     # Return empty if not enough data for analysis
     if df.empty or len(df) < 20:
         return []
+
 
 
     # Latest close price, high, and low
