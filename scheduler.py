@@ -90,20 +90,22 @@ def run():
         print(f"\n Time: {hour}:{minute}")
 
         today_str = now.strftime("%Y-%m-%d")
-        if today_str in HOLIDAYS_2026 or not is_market_open(now):
-            print(" Market Closed or Holiday")
-            if hour == 15 and minute >= 30 and last_report_date != today_str:
-                print(" Sending Daily Report")
-                msg = generate_daily_report(trade_log)
-                send_telegram(msg)
-                last_report_date = today_str
-            time.sleep(60)
-            continue
+        # BYPASS market hour and holiday check for testing
+        # if today_str in HOLIDAYS_2026 or not is_market_open(now):
+        #     print(" Market Closed or Holiday")
+        #     if hour == 15 and minute >= 30 and last_report_date != today_str:
+        #         print(" Sending Daily Report")
+        #         msg = generate_daily_report(trade_log)
+        #         send_telegram(msg)
+        #         last_report_date = today_str
+        #     time.sleep(60)
+        #     continue
 
-        if not allow_trade_time():
-            print(" Time Filter Blocked")
-            time.sleep(20)
-            continue
+        # BYPASS market time filter for testing
+        # if not allow_trade_time():
+        #     print(" Time Filter Blocked")
+        #     time.sleep(20)
+        #     continue
 
         nifty = nifty_trend()
 
