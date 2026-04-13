@@ -215,7 +215,7 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
     candle_ok = df["Close"].iloc[-1] > df["Open"].iloc[-1]
     volume_ok = df["Volume"].iloc[-1] > df["Volume"].rolling(20).mean().iloc[-1]
     retest_ok = is_retest_buy(df)
-    if buy_backbone_score == 4 and buy_score >= 4 and last_alert_side != "BUY" and candle_ok and volume_ok and retest_ok:
+    if buy_backbone_score == 4 and buy_score >= 4 and last_alert_side != "BUY" and candle_ok and volume_ok:
         entry_price = high_price
         sl = entry_price - 1.5 * atr_val
         target = entry_price + 2 * atr_val
