@@ -1,4 +1,4 @@
-ENABLE_RETEST_ALERT = True  # Set to False to disable breakout+retest only alerts
+ENABLE_RETEST_ALERT = False  # Set to False to disable breakout+retest only alerts (disabled - false alerts issue)
 from typing import List
 from datetime import datetime
 
@@ -56,20 +56,12 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
     except Exception:
         pass
 
-    # --- Flag Pattern Detection for ALL symbols (MANDATORY filter) ---
-    if len(df) > 21:
-        closes = df["Close"].iloc[-21:]
-        up_move = closes.iloc[:15].mean() < closes.iloc[15]
-        sideways = closes.iloc[15:].max() - closes.iloc[15:].min() < 0.01 * closes.iloc[15]
-        if up_move and sideways:
-            print(f"[Flag Pattern] {symbol}: DETECTED at {now.strftime('%H:%M')}")
-        else:
-            print(f"[Flag Pattern] {symbol}: NOT detected at {now.strftime('%H:%M')}")
-            return []  # If Flag Pattern not detected, skip all alerts
-    else:
-        print(f"[Flag Pattern] {symbol}: NOT ENOUGH DATA at {now.strftime('%H:%M')}")
-        return []  # Not enough data for pattern check
+    # --- Flag Pattern Detection removed as per user request ---
     # --- Breakout + Retest Only Alert Logic ---
+    
+    # Initialize actions list FIRST (before any use)
+    actions = []
+    
     if ENABLE_RETEST_ALERT and len(df) > 22:
         # BUY: Breakout candle, then retest candle
         last_high = df["High"].rolling(20).max().iloc[-3]
@@ -172,15 +164,21 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
         return []  # Skip if model can't predict
 
 
-    # Multi-timeframe moving averages
-    df_5m = get_ohlc(symbol=symbol, interval="5m", lookback=50)
-    ma20_5m = df_5m["Close"].rolling(20).mean().iloc[-1].item()
-    df_1h = get_ohlc(symbol=symbol, interval="1h", lookback=50)
-    ma20_1h = df_1h["Close"].rolling(20).mean().iloc[-1].item()
-
-
-    # List to collect trade actions (buy/sell signals)
-    actions = []
+    # Multi-timeframe moving averages (derived from main 1-minute data)
+    # Instead of 3 separate API calls, calculate from existing df
+    try:
+        # 5-minute MA: aggregate every 5 candles
+        df_5m_agg = df.iloc[::5].copy() if len(df) >= 5 else df
+        ma20_5m = df_5m_agg["Close"].rolling(20).mean().iloc[-1].item() if len(df_5m_agg) >= 20 else ma20
+    except:
+        ma20_5m = ma20  # Fallback to main MA if aggregation fails
+    
+    try:
+        # 1-hour MA: aggregate every 60 candles (60 min candles = 1 hour)
+        df_1h_agg = df.iloc[::60].copy() if len(df) >= 60 else df
+        ma20_1h = df_1h_agg["Close"].rolling(20).mean().iloc[-1].item() if len(df_1h_agg) >= 20 else ma20
+    except:
+        ma20_1h = ma20  # Fallback to main MA if aggregation fails
 
     # Calculate backbone score for BUY setup (core filters)
     buy_backbone_score, buy_backbone_details = calculate_buy_backbone(
@@ -215,6 +213,7 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
     candle_ok = df["Close"].iloc[-1] > df["Open"].iloc[-1]
     volume_ok = df["Volume"].iloc[-1] > df["Volume"].rolling(20).mean().iloc[-1]
     retest_ok = is_retest_buy(df)
+    # Retest is now optional: alert triggers even if retest_ok is False
     if buy_backbone_score == 4 and buy_score >= 4 and last_alert_side != "BUY" and candle_ok and volume_ok:
         entry_price = high_price
         sl = entry_price - 1.5 * atr_val
@@ -231,7 +230,7 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
                 "date": now.strftime("%Y-%m-%d"),
                 "time": now.strftime("%H:%M"),
             },
-            "msg": f"🚩 Flag Pattern Detected\n" + build_buy_message(
+            "msg": build_buy_message(
                 symbol,
                 entry_price,
                 target,
@@ -280,7 +279,8 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
     candle_ok_sell = df["Close"].iloc[-1] > df["Open"].iloc[-1]
     volume_ok_sell = df["Volume"].iloc[-1] > df["Volume"].rolling(20).mean().iloc[-1]
     retest_ok_sell = is_retest_sell(df)
-    if sell_backbone_score == 4 and sell_score >= 4 and last_alert_side != "SELL" and candle_ok_sell and volume_ok_sell and retest_ok_sell:
+    # Retest is now optional: alert triggers even if retest_ok_sell is False
+    if sell_backbone_score == 4 and sell_score >= 4 and last_alert_side != "SELL" and candle_ok_sell and volume_ok_sell:
         entry_price = low_price
         target = entry_price - 2 * atr_val
         sl = entry_price + atr_val
@@ -296,7 +296,7 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
                 "date": now.strftime("%Y-%m-%d"),
                 "time": now.strftime("%H:%M"),
             },
-            "msg": f"🚩 Flag Pattern Detected\n" + build_sell_message(
+            "msg": build_sell_message(
                 symbol,
                 entry_price,
                 target,
@@ -314,3 +314,59 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
 
     # Return all generated trade actions (buy/sell signals)
     return actions
+
+
+def check_pcr_drop(index_name, prev_pcr, curr_pcr):
+    """
+    Checks PCR drop for Nifty/Sensex and sends notification if drop crosses thresholds.
+    index_name: 'Nifty' or 'Sensex'
+    prev_pcr: Previous PCR value (float)
+    curr_pcr: Current PCR value (float)
+    """
+    if prev_pcr == 0:
+        return  # Avoid division by zero
+    drop_pct = ((prev_pcr - curr_pcr) / prev_pcr) * 100
+    thresholds = [15, 30, 40]
+    for threshold in thresholds:
+        if drop_pct >= threshold:
+            suggestion = "Consider BUY (bullish signal)"  # PCR drop usually means call activity increases
+            send_telegram(f"{index_name} PCR down {int(drop_pct)}% 📉\nCall option activity increases. Threshold: {threshold}%\n{suggestion}")
+            break  # Only notify for the highest threshold crossed
+
+
+def check_pcr_alerts(index_name, prev_pcr, curr_pcr):
+    """
+    Checks PCR drop/rise for Nifty/Sensex and sends notification if change crosses thresholds.
+    index_name: 'Nifty' or 'Sensex'
+    prev_pcr: Previous PCR value (float)
+    curr_pcr: Current PCR value (float)
+    """
+    if prev_pcr == 0:
+        return  # Avoid division by zero
+    change_pct = ((curr_pcr - prev_pcr) / prev_pcr) * 100
+    thresholds = [15, 30, 40]
+    # Bullish: PCR drops
+    if change_pct <= 0:
+        for threshold in thresholds:
+            if abs(change_pct) >= threshold:
+                suggestion = "Consider BUY (bullish signal)"  # PCR drop means call activity increases
+                send_telegram(f"{index_name} PCR down {int(abs(change_pct))}% 📉\nCall option activity increases. Threshold: {threshold}%\n{suggestion}")
+                break
+    # Bearish: PCR rises
+    else:
+        for threshold in thresholds:
+            if change_pct >= threshold:
+                suggestion = "Consider SELL (bearish signal)"  # PCR rise means put activity increases
+                send_telegram(f"{index_name} PCR up {int(change_pct)}% 📈\nPut option activity increases. Threshold: {threshold}%\n{suggestion}")
+                break
+
+
+# Example PCR values (replace with real data source)
+    prev_nifty_pcr = 1.2  # Replace with actual previous value
+    curr_nifty_pcr = 0.9  # Replace with actual current value
+    prev_sensex_pcr = 1.1  # Replace with actual previous value
+    curr_sensex_pcr = 0.8  # Replace with actual current value
+
+    # Check PCR drop for both indices before buy/sell logic
+    check_pcr_drop("Nifty", prev_nifty_pcr, curr_nifty_pcr)
+    check_pcr_drop("Sensex", prev_sensex_pcr, curr_sensex_pcr)

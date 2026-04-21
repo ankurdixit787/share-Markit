@@ -2,8 +2,15 @@ from datetime import datetime
 
 import pandas as pd
 import pytz
+import requests
 import yfinance as yf
 
+from config import ISIN_MAP
+
+UPSTOX_ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI1SkNWNFkiLCJqdGkiOiI2OWUyNGQ5ZmZiOTk1NzJjN2Q3NjM5OWQiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlhdCI6MTc3NjQzODY4NywiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxNzc2NDYzMjAwfQ.HvuoST01AEtMCwaGn-MyswNY1Jbmu3_PvOLO7P_d4ag"
+
+# Cache for tracking failed symbols in current session (avoid redundant Upstox API calls)
+_failed_symbols = set()
 
 def allow_trade_time():
     now = datetime.now(pytz.timezone('Asia/Kolkata')).time()
@@ -21,12 +28,41 @@ def get_ohlc(symbol, interval="5m", lookback=100):
 
 
 def get_data(symbol, interval, period):
+    """Fetch data from Upstox API.
+    Note: only 1minute and 30minute intervals are supported by Upstox.
+    Period is converted to lookback for 1-minute candles:
+    - "5d" = 360 candles (optimized for speed: 5 days at 1-min, market open ~72 min/day)
+    - "6mo" = 2000 candles (sufficient for model training without being too slow)
+    """
     try:
-        df = yf.download(symbol, interval=interval, period=period, progress=False)
+        # Map period to lookback (optimized for speed)
+        period_map = {
+            "5d": 360,      # ~5 days of intraday data
+            "5day": 360,
+            "1d": 72,       # ~1 day of intraday data
+            "1day": 72,
+            "6mo": 2000,    # Sufficient for ML model training
+            "1mo": 400,
+        }
+        lookback = period_map.get(period, 100)
+        
+        # Map common interval names to Upstox supported ones
+        interval_map = {
+            "5m": "1minute",
+            "5min": "1minute", 
+            "1m": "1minute",
+            "1min": "1minute",
+            "30m": "30minute",
+            "30min": "30minute",
+            "1d": "1minute",
+            "1h": "1minute",
+            "1minute": "1minute",
+            "30minute": "30minute"
+        }
+        mapped_interval = interval_map.get(interval, "1minute")
+        df = fetch_upstox_ohlc(symbol, mapped_interval, lookback=lookback)
         if df is None or df.empty:
             return pd.DataFrame()
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
         df = df.dropna()
         return df
     except Exception as e:

@@ -16,12 +16,9 @@ last_report_date = None
 
 
 def is_market_open(now: datetime) -> bool:
-    return (
-        now.weekday() not in [5, 6]
-        and ((now.hour > 9 or (now.hour == 9 and now.minute >= 15))
-             and (now.hour < 15 or (now.hour == 15 and now.minute <= 30)))
-    )
-
+    # MARKET HOURS BYPASS - testing 24/7
+    return True
+    
 
 def update_trade_statuses(trade_log, now: datetime):
     updated = False
@@ -124,4 +121,4 @@ def run():
             except Exception as e:
                 print(f" MAIN ERROR: {e}")
 
-        time.sleep(20)
+        time.sleep(5)  # Reduced from 20 to 5 seconds for faster alert detection

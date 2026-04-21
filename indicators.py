@@ -2,7 +2,6 @@ import pandas as pd
 
 
 def rsi(close):
-    print("📈 RSI")
     delta = close.diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -11,7 +10,6 @@ def rsi(close):
 
 
 def macd(close):
-    print("📈 MACD")
     return close.ewm(span=12).mean() - close.ewm(span=26).mean()
 
 
@@ -29,23 +27,35 @@ def vwap(df):
 
 
 def is_retest_sell(df):
-    if len(df) < 20:
+    if len(df) < 26:
         return False
 
     c1 = df.iloc[-1]
     c2 = df.iloc[-2]
     c3 = df.iloc[-3]
     vwap_val = vwap(df).iloc[-1]
+
+    # Volume confirmation: retest candle volume > 20-period average
+    vol_ok = c1["Volume"] > df["Volume"].rolling(20).mean().iloc[-1]
+    # RSI confirmation: RSI < 50 (bearish)
+    rsi_val = rsi(df["Close"]).iloc[-1]
+    rsi_ok = rsi_val < 50
+    # MACD confirmation: MACD < 0 (bearish)
+    macd_val = macd(df["Close"]).iloc[-1]
+    macd_ok = macd_val < 0
 
     return (
         c3["Close"] < vwap_val
         and c2["High"] >= vwap_val
         and c1["Close"] < c2["Low"]
+        and vol_ok
+        and rsi_ok
+        and macd_ok
     )
 
 
 def is_retest_buy(df):
-    if len(df) < 20:
+    if len(df) < 26:
         return False
 
     c1 = df.iloc[-1]
@@ -53,9 +63,20 @@ def is_retest_buy(df):
     c3 = df.iloc[-3]
     vwap_val = vwap(df).iloc[-1]
 
-    # Flexible: allow c2['Low'] within ±3 of VWAP
+    # Volume confirmation: retest candle volume > 20-period average
+    vol_ok = c1["Volume"] > df["Volume"].rolling(20).mean().iloc[-1]
+    # RSI confirmation: RSI > 50 (bullish)
+    rsi_val = rsi(df["Close"]).iloc[-1]
+    rsi_ok = rsi_val > 50
+    # MACD confirmation: MACD > 0 (bullish)
+    macd_val = macd(df["Close"]).iloc[-1]
+    macd_ok = macd_val > 0
+
     return (
         c3["Close"] > vwap_val
         and abs(c2["Low"] - vwap_val) <= 3
         and c1["Close"] > c2["High"]
+        and vol_ok
+        and rsi_ok
+        and macd_ok
     )
