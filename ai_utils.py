@@ -6,20 +6,27 @@ from indicators import rsi, macd
 
 
 def train(symbol):
-    df = get_data(symbol, "1d", "6mo")
-    if df.empty:
+    # Use available intraday data from last 7 days (Upstox limitation)
+    df = get_data(symbol, "5m", "5d")
+    print(f"DEBUG: {symbol} data rows: {len(df)}")
+    if df.empty or len(df) < 30:  # Reduced from 50 to 30 for 5-day data
+        print(f"⚠️  No data for {symbol}")
         return None
 
     df["RSI"] = rsi(df["Close"])
     df["MACD"] = macd(df["Close"])
-    df["Target"] = (df["Close"].shift(-3) > df["Close"]).astype(int)
+    # Use simple momentum target: price up in next 5 candles
+    df["Target"] = (df["Close"].shift(-5) > df["Close"]).astype(int)
     df = df.dropna()
-    if df.empty:
+    if df.empty or len(df) < 20:  # Reduced minimum for training
+        print(f"⚠️  Insufficient data for {symbol}")
         return None
 
     X = df[["RSI", "MACD"]]
     y = df["Target"]
-    model = RandomForestClassifier(n_estimators=50)
+    if len(X) < 10:
+        return None
+    model = RandomForestClassifier(n_estimators=50, random_state=42)
     model.fit(X, y)
     print(f"✅ Model Ready: {symbol}")
     return model

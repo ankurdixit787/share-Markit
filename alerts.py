@@ -69,14 +69,14 @@ def calculate_buy_score(price, df, news_score, prob, roc_val):
 
     # 7. 15-min Moving Average filter
     # If price is above 15-bar moving average, add to score
-    ma_15m = df["Close"].rolling(15).mean().iloc[-1]
+    ma_15m = df["Close"].rolling(15).mean().iloc[-1].item()
     if price > ma_15m:
         score += 1
         cond_details.append("TF15m✔")
 
     # 8. Volume filter
     # If current volume is 20% higher than 20-bar average, add to score
-    vol_ratio = df["Volume"].iloc[-1] / df["Volume"].rolling(20).mean().iloc[-1]
+    vol_ratio = df["Volume"].iloc[-1].item() / df["Volume"].rolling(20).mean().iloc[-1].item()
     if vol_ratio > 1.2:
         score += 1
         cond_details.append("VOL✔")
@@ -103,12 +103,12 @@ def calculate_sell_score(price, df, news_score, prob, roc_val):
         cond_details.append("ROC✔")
 
 
-    ma_15m = df["Close"].rolling(15).mean().iloc[-1]
+    ma_15m = df["Close"].rolling(15).mean().iloc[-1].item()
     if price < ma_15m:
         score += 1
         cond_details.append("TF15m✔")
 
-    vol_ratio = df["Volume"].iloc[-1] / df["Volume"].rolling(20).mean().iloc[-1]
+    vol_ratio = df["Volume"].iloc[-1].item() / df["Volume"].rolling(20).mean().iloc[-1].item()
     if vol_ratio > 1.2:
         score += 1
         cond_details.append("VOL✔")

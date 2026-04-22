@@ -33,15 +33,15 @@ def is_retest_sell(df):
     c1 = df.iloc[-1]
     c2 = df.iloc[-2]
     c3 = df.iloc[-3]
-    vwap_val = vwap(df).iloc[-1]
+    vwap_val = vwap(df).iloc[-1].item() if hasattr(vwap(df).iloc[-1], 'item') else vwap(df).iloc[-1]
 
     # Volume confirmation: retest candle volume > 20-period average
-    vol_ok = c1["Volume"] > df["Volume"].rolling(20).mean().iloc[-1]
+    vol_ok = c1["Volume"] > df["Volume"].rolling(20).mean().iloc[-1].item()
     # RSI confirmation: RSI < 50 (bearish)
-    rsi_val = rsi(df["Close"]).iloc[-1]
+    rsi_val = rsi(df["Close"]).iloc[-1].item() if hasattr(rsi(df["Close"]).iloc[-1], 'item') else rsi(df["Close"]).iloc[-1]
     rsi_ok = rsi_val < 50
     # MACD confirmation: MACD < 0 (bearish)
-    macd_val = macd(df["Close"]).iloc[-1]
+    macd_val = macd(df["Close"]).iloc[-1].item() if hasattr(macd(df["Close"]).iloc[-1], 'item') else macd(df["Close"]).iloc[-1]
     macd_ok = macd_val < 0
 
     return (
@@ -61,15 +61,15 @@ def is_retest_buy(df):
     c1 = df.iloc[-1]
     c2 = df.iloc[-2]
     c3 = df.iloc[-3]
-    vwap_val = vwap(df).iloc[-1]
+    vwap_val = vwap(df).iloc[-1].item() if hasattr(vwap(df).iloc[-1], 'item') else vwap(df).iloc[-1]
 
     # Volume confirmation: retest candle volume > 20-period average
-    vol_ok = c1["Volume"] > df["Volume"].rolling(20).mean().iloc[-1]
+    vol_ok = c1["Volume"] > df["Volume"].rolling(20).mean().iloc[-1].item()
     # RSI confirmation: RSI > 50 (bullish)
-    rsi_val = rsi(df["Close"]).iloc[-1]
+    rsi_val = rsi(df["Close"]).iloc[-1].item() if hasattr(rsi(df["Close"]).iloc[-1], 'item') else rsi(df["Close"]).iloc[-1]
     rsi_ok = rsi_val > 50
     # MACD confirmation: MACD > 0 (bullish)
-    macd_val = macd(df["Close"]).iloc[-1]
+    macd_val = macd(df["Close"]).iloc[-1].item() if hasattr(macd(df["Close"]).iloc[-1], 'item') else macd(df["Close"]).iloc[-1]
     macd_ok = macd_val > 0
 
     return (

@@ -1,4 +1,4 @@
-ENABLE_RETEST_ALERT = False  # Set to False to disable breakout+retest only alerts (disabled - false alerts issue)
+ENABLE_RETEST_ALERT = True  # Enable flag pattern detection
 from typing import List
 from datetime import datetime
 
@@ -18,69 +18,30 @@ from news import news_sentiment
 
 
 def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, now: datetime) -> List[dict]:
-    # --- Big News Alert Logic ---
-    try:
-        import yfinance as yf
-        news = yf.Ticker(symbol).news
-        important_keywords = [
-            "crash", "ban", "record high", "all-time high", "scam", "merger", "acquisition", "policy change",
-            "fraud", "default", "bankruptcy", "fire", "strike", "investigation", "raid", "tax", "fine", "penalty",
-            "court", "lawsuit", "regulation", "approval", "deal", "partnership", "IPO", "listing", "delisting"
-        ]
-        big_news_found = False
-        big_news_title = ""
-        for n in news[:5]:
-            title = n.get("title", "") if isinstance(n, dict) else str(n)
-            if title:
-                title_lower = title.lower()
-                if any(k in title_lower for k in important_keywords):
-                    big_news_found = True
-                    big_news_title = title
-                    break
-        news_score = news_sentiment(symbol)
-        if big_news_found or news_score > 0.7 or news_score < -0.7:
-            if news_score > 0.3:
-                suggestion = "BUY"
-            elif news_score < -0.3:
-                suggestion = "SELL"
-            else:
-                suggestion = "WAIT"
-            msg = (
-                f"📰 BIG NEWS ALERT: {symbol}\n"
-                f"Title: {big_news_title if big_news_found else 'Sentiment Spike'}\n"
-                f"Sentiment: {news_score:.2f}\n"
-                f"Suggestion: {suggestion}\n"
-                f"Time: {now.strftime('%H:%M')}"
-            )
-            send_telegram(msg)
-    except Exception:
-        pass
-
-    # --- Flag Pattern Detection removed as per user request ---
-    # --- Breakout + Retest Only Alert Logic ---
+    # --- Upstox Only - No News, No yfinance fallback ---
     
     # Initialize actions list FIRST (before any use)
     actions = []
     
     if ENABLE_RETEST_ALERT and len(df) > 22:
         # BUY: Breakout candle, then retest candle
-        last_high = df["High"].rolling(20).max().iloc[-3]
+        last_high = float(df["High"].rolling(20).max().iloc[-3])
         breakout_candle = df.iloc[-2]
         retest_candle = df.iloc[-1]
         # Breakout: previous candle closes above last_high, previous-1 closes below
         breakout = (
-            breakout_candle["Close"] > last_high and
-            df["Close"].iloc[-3] < last_high
+            float(breakout_candle["Close"]) > last_high and
+            float(df["Close"].iloc[-3]) < last_high
         )
         # Retest: current candle low <= last_high and close > last_high
         retest = (
-            retest_candle["Low"] <= last_high and
-            retest_candle["Close"] > last_high
+            float(retest_candle["Low"]) <= last_high and
+            float(retest_candle["Close"]) > last_high
         )
         if breakout and retest:
-            entry_price = retest_candle["Close"]
-            sl = entry_price - 1.5 * atr(df).iloc[-1]
-            target = entry_price + 2 * atr(df).iloc[-1]
+            entry_price = float(retest_candle["Close"])
+            sl = entry_price - 1.5 * float(atr(df).iloc[-1])
+            target = entry_price + 2 * float(atr(df).iloc[-1])
             actions.append({
                 "side": "BUY",
                 "trade": {
@@ -97,19 +58,19 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
             })
 
         # SELL: Breakdown candle, then retest candle
-        last_low = df["Low"].rolling(20).min().iloc[-3]
+        last_low = float(df["Low"].rolling(20).min().iloc[-3])
         breakdown = (
-            breakout_candle["Close"] < last_low and
-            df["Close"].iloc[-3] > last_low
+            float(breakout_candle["Close"]) < last_low and
+            float(df["Close"].iloc[-3]) > last_low
         )
         retest_sell = (
-            retest_candle["High"] >= last_low and
-            retest_candle["Close"] < last_low
+            float(retest_candle["High"]) >= last_low and
+            float(retest_candle["Close"]) < last_low
         )
         if breakdown and retest_sell:
-            entry_price = retest_candle["Close"]
-            sl = entry_price + atr(df).iloc[-1]
-            target = entry_price - 2 * atr(df).iloc[-1]
+            entry_price = float(retest_candle["Close"])
+            sl = entry_price + float(atr(df).iloc[-1])
+            target = entry_price - 2 * float(atr(df).iloc[-1])
             actions.append({
                 "side": "SELL",
                 "trade": {
@@ -157,8 +118,8 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
     roc_val = roc_series.iloc[-1].item() if not roc_series.empty else 0.0
 
 
-    # News sentiment score and AI model probability
-    news_score = news_sentiment(symbol)
+    # AI model probability only (news disabled)
+    news_score = 0  # Disabled - using only Upstox
     prob = predict(model, df)
     if prob is None:
         return []  # Skip if model can't predict
@@ -210,8 +171,8 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
     print("==============================\n")
 
     # BUY signal: At least 2 backbone and 2 score filters pass, all 3 conditions True, and last alert not BUY
-    candle_ok = df["Close"].iloc[-1] > df["Open"].iloc[-1]
-    volume_ok = df["Volume"].iloc[-1] > df["Volume"].rolling(20).mean().iloc[-1]
+    candle_ok = df["Close"].iloc[-1].item() > df["Open"].iloc[-1].item()
+    volume_ok = df["Volume"].iloc[-1].item() > df["Volume"].rolling(20).mean().iloc[-1].item()
     retest_ok = is_retest_buy(df)
     # Retest is now optional: alert triggers even if retest_ok is False
     if buy_backbone_score == 4 and buy_score >= 4 and last_alert_side != "BUY" and candle_ok and volume_ok:
@@ -276,8 +237,8 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
     print("==============================\n")
 
     # SELL signal: At least 2 backbone and 2 score filters pass, all 3 conditions True, and last alert not SELL
-    candle_ok_sell = df["Close"].iloc[-1] > df["Open"].iloc[-1]
-    volume_ok_sell = df["Volume"].iloc[-1] > df["Volume"].rolling(20).mean().iloc[-1]
+    candle_ok_sell = df["Close"].iloc[-1].item() > df["Open"].iloc[-1].item()
+    volume_ok_sell = df["Volume"].iloc[-1].item() > df["Volume"].rolling(20).mean().iloc[-1].item()
     retest_ok_sell = is_retest_sell(df)
     # Retest is now optional: alert triggers even if retest_ok_sell is False
     if sell_backbone_score == 4 and sell_score >= 4 and last_alert_side != "SELL" and candle_ok_sell and volume_ok_sell:
