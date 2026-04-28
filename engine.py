@@ -3,6 +3,7 @@ from typing import List
 from datetime import datetime
 
 from ai_utils import predict
+from config import MIN_TARGET_POINTS
 from telegram import send_telegram
 from alerts import (
     build_buy_message,
@@ -179,7 +180,11 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
         entry_price = high_price
         sl = entry_price - 1.5 * atr_val
         target = entry_price + 2 * atr_val
-        actions.append({
+        # Skip tiny-target trades
+        if abs(target - entry_price) < MIN_TARGET_POINTS:
+            print(f"SKIP BUY {symbol}: target distance {abs(target-entry_price):.2f} < MIN_TARGET_POINTS ({MIN_TARGET_POINTS})")
+        else:
+            actions.append({
             "side": "BUY",
             "trade": {
                 "symbol": symbol,
@@ -245,7 +250,11 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
         entry_price = low_price
         target = entry_price - 2 * atr_val
         sl = entry_price + atr_val
-        actions.append({
+        # Skip tiny-target trades
+        if abs(entry_price - target) < MIN_TARGET_POINTS:
+            print(f"SKIP SELL {symbol}: target distance {abs(entry_price-target):.2f} < MIN_TARGET_POINTS ({MIN_TARGET_POINTS})")
+        else:
+            actions.append({
             "side": "SELL",
             "trade": {
                 "symbol": symbol,

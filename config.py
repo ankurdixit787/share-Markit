@@ -137,3 +137,6 @@ ISIN_MAP = {
     "RBLBANK": "INE431H01012",
     "NSEI": "NIFTY50",  # Index symbol
 }
+
+# Minimum target distance (in price points) to consider an alert valid
+MIN_TARGET_POINTS = 2.0

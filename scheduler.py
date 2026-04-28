@@ -4,6 +4,10 @@ from datetime import datetime
 import pytz
 
 from config import HOLIDAYS_2026, RED
+try:
+    from config import ALWAYS_RUN
+except ImportError:
+    ALWAYS_RUN = False
 from data_utils import allow_trade_time, get_data, nifty_trend
 from engine import evaluate_symbol
 from report import generate_daily_report
