@@ -139,4 +139,4 @@ ISIN_MAP = {
 }
 
 # Minimum target distance (in price points) to consider an alert valid
-MIN_TARGET_POINTS = 2.0
+MIN_TARGET_POINTS = 10.0
