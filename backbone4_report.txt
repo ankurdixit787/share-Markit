@@ -1,4 +1,0 @@
-REPORT ACC.NS BUY: backbone=4, score=2/8, conditions=TF15m✔, VOL✔
-REPORT ACC.NS: BUY backbone=4/4 score=2/8 [MA20+NIFTY✔, RSI+MACD✔, VWAP+VOL✔, MultiTF✔] COND[TF15m✔, VOL✔]; SELL backbone=0/4 score=3/8 [none] COND[AI✔, ROC✔, VOL✔]
-REPORT OBEROIRLTY.NS BUY: backbone=4, score=3/8, conditions=ATR✔, TF15m✔, VOL✔
-REPORT OBEROIRLTY.NS: BUY backbone=4/4 score=3/8 [MA20+NIFTY✔, RSI+MACD✔, VWAP+VOL✔, MultiTF✔] COND[ATR✔, TF15m✔, VOL✔]; SELL backbone=0/4 score=3/8 [none] COND[ROC✔, ATR✔, VOL✔]
