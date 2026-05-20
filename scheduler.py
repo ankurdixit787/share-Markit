@@ -87,7 +87,7 @@ def run():
     while True:
         now = datetime.now(ist)
         hour, minute = now.hour, now.minute
-        print(f"\n Time: {hour}:{minute}")
+        print(f"\n Time: {now.strftime('%H:%M')}")
 
         today_str = now.strftime("%Y-%m-%d")
         if today_str in HOLIDAYS_2026 or not is_market_open(now):

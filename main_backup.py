@@ -249,7 +249,7 @@ def run():
     while True:
         now = datetime.now(ist)
         hour, minute = now.hour, now.minute
-        print(f"\n🕒 Time: {hour}:{minute}")
+        print(f"\n🕒 Time: {now.strftime('%H:%M')}")
 
         today_str = datetime.now(ist).strftime("%Y-%m-%d")
         last_report_date = None
