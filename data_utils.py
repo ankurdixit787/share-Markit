@@ -8,7 +8,7 @@ import yfinance as yf
 def allow_trade_time():
     now = datetime.now(pytz.timezone('Asia/Kolkata')).time()
     start = datetime.strptime("09:25", "%H:%M").time()
-    end = datetime.strptime("14:30", "%H:%M").time()
+    end = datetime.strptime("15:30", "%H:%M").time()
     return start <= now <= end
 
 
