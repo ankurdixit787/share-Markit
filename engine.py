@@ -69,17 +69,21 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
     else:
         print(f"[Flag Pattern] {symbol}: NOT ENOUGH DATA at {now.strftime('%H:%M')}")
         return []  # Not enough data for pattern check
-    # --- Breakout + Retest Only Alert Logic ---
-    if ENABLE_RETEST_ALERT and len(df) > 22:
-        # BUY: Breakout candle, then retest candle
+    # --- Breakout Detection (used for both standalone and backbone signals) ---
+    breakout = False
+    last_high = None
+    if len(df) > 22:
         last_high = df["High"].rolling(20).max().iloc[-3]
         breakout_candle = df.iloc[-2]
-        retest_candle = df.iloc[-1]
-        # Breakout: previous candle closes above last_high, previous-1 closes below
         breakout = (
             breakout_candle["Close"] > last_high and
             df["Close"].iloc[-3] < last_high
         )
+
+    # --- Breakout + Retest Only Alert Logic ---
+    if ENABLE_RETEST_ALERT and len(df) > 22 and last_high is not None:
+        # BUY: Breakout candle, then retest candle
+        retest_candle = df.iloc[-1]
         # Retest: current candle low <= last_high and close > last_high
         retest = (
             retest_candle["Low"] <= last_high and
@@ -215,7 +219,7 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
     candle_ok = df["Close"].iloc[-1] > df["Open"].iloc[-1]
     volume_ok = df["Volume"].iloc[-1] > df["Volume"].rolling(20).mean().iloc[-1]
     retest_ok = is_retest_buy(df)
-    if buy_backbone_score == 4 and buy_score >= 4 and last_alert_side != "BUY" and candle_ok and volume_ok:
+    if buy_backbone_score == 4 and buy_score >= 4 and last_alert_side != "BUY" and candle_ok and volume_ok and breakout:
         entry_price = high_price
         sl = entry_price - 1.5 * atr_val
         target = entry_price + 2 * atr_val
@@ -231,7 +235,7 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
                 "date": now.strftime("%Y-%m-%d"),
                 "time": now.strftime("%H:%M"),
             },
-            "msg": f"🚩 Flag Pattern Detected\n" + build_buy_message(
+            "msg": build_buy_message(
                 symbol,
                 entry_price,
                 target,
@@ -296,7 +300,7 @@ def evaluate_symbol(symbol: str, model, df, nifty: int, last_alert_side: str, no
                 "date": now.strftime("%Y-%m-%d"),
                 "time": now.strftime("%H:%M"),
             },
-            "msg": f"🚩 Flag Pattern Detected\n" + build_sell_message(
+            "msg": build_sell_message(
                 symbol,
                 entry_price,
                 target,
