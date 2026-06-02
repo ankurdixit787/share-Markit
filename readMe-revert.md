@@ -1,0 +1,1 @@
+Added Trend + Pullback + Breakout condition to alerts.py Revet pushed Succesfully  
